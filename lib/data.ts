@@ -1,3 +1,24 @@
+// Extended status types for BTT and 1-2 Day workflows
+export type RegistrationStatus = 
+  | "Confirmed" 
+  | "Denied" 
+  | "Pending"
+  | "Waitlisted" 
+  | "Cancelled"
+  | "BTT Pending" 
+  | "BTT Confirmed" 
+  | "BTT Rejected"
+  | "1 to 2 Day Pending"
+  | "1 to 2 Day Accepted"
+  | "1 to 2 Day Rejected"
+
+// Past career fair notes from previous years
+export type PastNote = {
+  year: string
+  memberInitials: string
+  note: string
+}
+
 export type RegistrationEntry = {
   id: string
   // Raw org name (may have variants)
@@ -9,6 +30,9 @@ export type RegistrationEntry = {
   boothLocation: string
   attendeeType: "In-Person" | "Virtual" | "Hybrid"
   daysAttending: ("Day 1" | "Day 2")[]
+  // NEW: Days of Fair fields
+  needsPower: boolean
+  repCount: number
   // Recruitment
   topMajor: string
   majorsRecruited: string[]
@@ -23,8 +47,13 @@ export type RegistrationEntry = {
   additionalRepsDay2: string
   // Meta
   industry: string
-  status: "Confirmed" | "Pending" | "Waitlisted" | "Cancelled"
+  status: RegistrationStatus
   semester: string
+  // NEW: Management fields
+  assignedTo: string | null  // References SECMember initials
+  lastStatusUpdate: string   // ISO date
+  // NEW: Past notes from previous career fairs
+  pastNotes: PastNote[]
 }
 
 // =====================
@@ -76,6 +105,7 @@ export type TimelineEntry = {
 export type SECMember = {
   id: string
   name: string
+  initials: string
   role: string
   email: string
   dietaryRestrictions: string[]
@@ -163,6 +193,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "A1",
     attendeeType: "In-Person",
     daysAttending: ["Day 1", "Day 2"],
+    needsPower: true,
+    repCount: 3,
     topMajor: "Petroleum Engineering",
     majorsRecruited: ["Petroleum Engineering", "Chemical Engineering", "Mechanical Engineering"],
     degreeLevels: ["Junior", "Senior", "Masters"],
@@ -176,6 +208,12 @@ export const rawRegistrations: RegistrationEntry[] = [
     industry: "Energy",
     status: "Confirmed",
     semester: "Spring 2026",
+    assignedTo: "AR",
+    lastStatusUpdate: "2026-01-08T14:00:00Z",
+    pastNotes: [
+      { year: "Spring 2025", memberInitials: "MS", note: "Outstanding engagement with students. Always well-prepared." },
+      { year: "Fall 2024", memberInitials: "JW", note: "Requested larger booth space for next fair." },
+    ],
   },
   {
     id: "2",
@@ -186,6 +224,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "A2",
     attendeeType: "In-Person",
     daysAttending: ["Day 1"],
+    needsPower: false,
+    repCount: 2,
     topMajor: "Chemical Engineering",
     majorsRecruited: ["Chemical Engineering", "Environmental Engineering"],
     degreeLevels: ["Senior", "Masters"],
@@ -199,6 +239,9 @@ export const rawRegistrations: RegistrationEntry[] = [
     industry: "Energy",
     status: "Confirmed",
     semester: "Spring 2026",
+    assignedTo: "AR",
+    lastStatusUpdate: "2026-01-05T10:00:00Z",
+    pastNotes: [],
   },
   {
     id: "3",
@@ -209,6 +252,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "B3",
     attendeeType: "Hybrid",
     daysAttending: ["Day 2"],
+    needsPower: true,
+    repCount: 2,
     topMajor: "Mechanical Engineering",
     majorsRecruited: ["Mechanical Engineering"],
     degreeLevels: ["Junior", "Senior"],
@@ -220,8 +265,13 @@ export const rawRegistrations: RegistrationEntry[] = [
     additionalRepsDay1: "",
     additionalRepsDay2: "Amy Garza",
     industry: "Energy",
-    status: "Pending",
+    status: "BTT Pending",
     semester: "Spring 2026",
+    assignedTo: null,
+    lastStatusUpdate: "2026-01-02T09:00:00Z",
+    pastNotes: [
+      { year: "Fall 2024", memberInitials: "MJ", note: "New division, first time attending." },
+    ],
   },
   {
     id: "4",
@@ -232,6 +282,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "A3",
     attendeeType: "In-Person",
     daysAttending: ["Day 1", "Day 2"],
+    needsPower: true,
+    repCount: 4,
     topMajor: "Petroleum Engineering",
     majorsRecruited: ["Petroleum Engineering", "Chemical Engineering", "Electrical Engineering"],
     degreeLevels: ["Sophomore", "Junior", "Senior", "Masters", "PhD"],
@@ -245,6 +297,12 @@ export const rawRegistrations: RegistrationEntry[] = [
     industry: "Energy",
     status: "Confirmed",
     semester: "Spring 2026",
+    assignedTo: "JT",
+    lastStatusUpdate: "2026-01-12T08:00:00Z",
+    pastNotes: [
+      { year: "Spring 2025", memberInitials: "AR", note: "Top-tier employer. Always maxes out interview slots." },
+      { year: "Fall 2024", memberInitials: "JW", note: "Excellent partnership. Donated extra swag for students." },
+    ],
   },
   {
     id: "5",
@@ -255,6 +313,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "C1",
     attendeeType: "In-Person",
     daysAttending: ["Day 1", "Day 2"],
+    needsPower: true,
+    repCount: 2,
     topMajor: "Electrical Engineering",
     majorsRecruited: ["Electrical Engineering", "Computer Engineering", "Computer Science"],
     degreeLevels: ["Junior", "Senior", "Masters"],
@@ -268,6 +328,11 @@ export const rawRegistrations: RegistrationEntry[] = [
     industry: "Semiconductor",
     status: "Confirmed",
     semester: "Spring 2026",
+    assignedTo: "RP",
+    lastStatusUpdate: "2026-01-10T11:00:00Z",
+    pastNotes: [
+      { year: "Fall 2024", memberInitials: "SL", note: "Solid recruiter presence. Focus on hardware roles." },
+    ],
   },
   {
     id: "6",
@@ -278,6 +343,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "A4",
     attendeeType: "In-Person",
     daysAttending: ["Day 1", "Day 2"],
+    needsPower: false,
+    repCount: 3,
     topMajor: "Aerospace Engineering",
     majorsRecruited: ["Aerospace Engineering", "Mechanical Engineering", "Electrical Engineering", "Computer Science"],
     degreeLevels: ["Junior", "Senior", "Masters", "PhD"],
@@ -291,6 +358,12 @@ export const rawRegistrations: RegistrationEntry[] = [
     industry: "Defense & Aerospace",
     status: "Confirmed",
     semester: "Spring 2026",
+    assignedTo: "MJ",
+    lastStatusUpdate: "2026-01-05T09:00:00Z",
+    pastNotes: [
+      { year: "Spring 2025", memberInitials: "EP", note: "Security clearance info session was very popular." },
+      { year: "Fall 2024", memberInitials: "AR", note: "Strong aerospace recruiting. Students love the swag." },
+    ],
   },
   {
     id: "7",
@@ -301,6 +374,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "C2",
     attendeeType: "In-Person",
     daysAttending: ["Day 1", "Day 2"],
+    needsPower: true,
+    repCount: 3,
     topMajor: "Computer Science",
     majorsRecruited: ["Computer Science", "Computer Engineering", "Information Technology"],
     degreeLevels: ["Junior", "Senior", "Masters"],
@@ -312,8 +387,13 @@ export const rawRegistrations: RegistrationEntry[] = [
     additionalRepsDay1: "Carlos Vega",
     additionalRepsDay2: "Carlos Vega, Emily Zhao",
     industry: "Technology",
-    status: "Confirmed",
+    status: "1 to 2 Day Pending",
     semester: "Spring 2026",
+    assignedTo: null,
+    lastStatusUpdate: "2026-01-01T12:00:00Z",
+    pastNotes: [
+      { year: "Spring 2025", memberInitials: "JW", note: "High volume recruiter. Students lined up for hours." },
+    ],
   },
   {
     id: "8",
@@ -324,6 +404,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "B1",
     attendeeType: "In-Person",
     daysAttending: ["Day 1"],
+    needsPower: false,
+    repCount: 1,
     topMajor: "Petroleum Engineering",
     majorsRecruited: ["Petroleum Engineering", "Chemical Engineering"],
     degreeLevels: ["Senior", "Masters"],
@@ -337,6 +419,11 @@ export const rawRegistrations: RegistrationEntry[] = [
     industry: "Energy",
     status: "Pending",
     semester: "Spring 2026",
+    assignedTo: "SL",
+    lastStatusUpdate: "2026-01-05T15:00:00Z",
+    pastNotes: [
+      { year: "Fall 2024", memberInitials: "CW", note: "Lower engagement than expected. May need follow-up." },
+    ],
   },
   {
     id: "9",
@@ -347,6 +434,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "B2",
     attendeeType: "Hybrid",
     daysAttending: ["Day 1", "Day 2"],
+    needsPower: true,
+    repCount: 2,
     topMajor: "Petroleum Engineering",
     majorsRecruited: ["Petroleum Engineering", "Mechanical Engineering", "Computer Science"],
     degreeLevels: ["Junior", "Senior", "Masters"],
@@ -360,6 +449,9 @@ export const rawRegistrations: RegistrationEntry[] = [
     industry: "Oilfield Services",
     status: "Confirmed",
     semester: "Spring 2026",
+    assignedTo: "AK",
+    lastStatusUpdate: "2026-01-10T10:00:00Z",
+    pastNotes: [],
   },
   {
     id: "10",
@@ -370,6 +462,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "C3",
     attendeeType: "In-Person",
     daysAttending: ["Day 1", "Day 2"],
+    needsPower: true,
+    repCount: 2,
     topMajor: "Aerospace Engineering",
     majorsRecruited: ["Aerospace Engineering", "Mechanical Engineering", "Electrical Engineering"],
     degreeLevels: ["Junior", "Senior", "Masters"],
@@ -381,8 +475,14 @@ export const rawRegistrations: RegistrationEntry[] = [
     additionalRepsDay1: "Raj Patel",
     additionalRepsDay2: "",
     industry: "Defense & Aerospace",
-    status: "Waitlisted",
+    status: "BTT Pending",
     semester: "Spring 2026",
+    assignedTo: null,
+    lastStatusUpdate: "2025-12-20T14:00:00Z",
+    pastNotes: [
+      { year: "Spring 2025", memberInitials: "SC", note: "Payment issues. Follow up with finance team." },
+      { year: "Fall 2024", memberInitials: "MR", note: "Good aerospace presence but limited hiring." },
+    ],
   },
   {
     id: "11",
@@ -393,6 +493,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "A5",
     attendeeType: "In-Person",
     daysAttending: ["Day 1", "Day 2"],
+    needsPower: true,
+    repCount: 4,
     topMajor: "Computer Science",
     majorsRecruited: ["Computer Science", "Computer Engineering", "Information Systems"],
     degreeLevels: ["Junior", "Senior", "Masters", "PhD"],
@@ -406,6 +508,12 @@ export const rawRegistrations: RegistrationEntry[] = [
     industry: "Technology",
     status: "Confirmed",
     semester: "Spring 2026",
+    assignedTo: "ED",
+    lastStatusUpdate: "2026-01-02T08:00:00Z",
+    pastNotes: [
+      { year: "Spring 2025", memberInitials: "EP", note: "Top-rated employer by students. Perfect attendance record." },
+      { year: "Fall 2024", memberInitials: "MS", note: "Incredible swag and tech demos. Students loved it." },
+    ],
   },
   {
     id: "12",
@@ -416,6 +524,8 @@ export const rawRegistrations: RegistrationEntry[] = [
     boothLocation: "B4",
     attendeeType: "In-Person",
     daysAttending: ["Day 1"],
+    needsPower: false,
+    repCount: 1,
     topMajor: "Petroleum Engineering",
     majorsRecruited: ["Petroleum Engineering"],
     degreeLevels: ["Senior"],
@@ -427,8 +537,13 @@ export const rawRegistrations: RegistrationEntry[] = [
     additionalRepsDay1: "",
     additionalRepsDay2: "",
     industry: "Oilfield Services",
-    status: "Cancelled",
+    status: "Denied",
     semester: "Spring 2026",
+    assignedTo: "DK",
+    lastStatusUpdate: "2026-01-15T16:45:00Z",
+    pastNotes: [
+      { year: "Fall 2024", memberInitials: "DK", note: "Declining engagement. Budget constraints mentioned." },
+    ],
   },
 ]
 
@@ -461,7 +576,7 @@ export type NormalizedCompany = {
   industry: string
   topMajor: string
   package: RegistrationEntry["package"]
-  status: RegistrationEntry["status"]
+  status: RegistrationStatus
 }
 
 export function getNormalizedCompanies(): NormalizedCompany[] {
@@ -875,6 +990,7 @@ export const secMembers: SECMember[] = [
   {
     id: "m1",
     name: "Alex Rodriguez",
+    initials: "AR",
     role: "President",
     email: "alex.r@tamu.edu",
     dietaryRestrictions: [],
@@ -883,6 +999,7 @@ export const secMembers: SECMember[] = [
   {
     id: "m2",
     name: "Jessica Thompson",
+    initials: "JT",
     role: "VP Operations",
     email: "jess.t@tamu.edu",
     dietaryRestrictions: ["Gluten-Free"],
@@ -891,6 +1008,7 @@ export const secMembers: SECMember[] = [
   {
     id: "m3",
     name: "Ryan Patel",
+    initials: "RP",
     role: "Finance Director",
     email: "ryan.p@tamu.edu",
     dietaryRestrictions: [],
@@ -899,6 +1017,7 @@ export const secMembers: SECMember[] = [
   {
     id: "m4",
     name: "Sophia Lee",
+    initials: "SL",
     role: "Hospitality Lead",
     email: "sophia.l@tamu.edu",
     dietaryRestrictions: ["Dairy-Free"],
@@ -907,6 +1026,7 @@ export const secMembers: SECMember[] = [
   {
     id: "m5",
     name: "Marcus Johnson",
+    initials: "MJ",
     role: "Registration Lead",
     email: "marcus.j@tamu.edu",
     dietaryRestrictions: [],
@@ -915,6 +1035,7 @@ export const secMembers: SECMember[] = [
   {
     id: "m6",
     name: "Aisha Khan",
+    initials: "AK",
     role: "Marketing Director",
     email: "aisha.k@tamu.edu",
     dietaryRestrictions: [],
@@ -923,6 +1044,7 @@ export const secMembers: SECMember[] = [
   {
     id: "m7",
     name: "Chris Williams",
+    initials: "CW",
     role: "Logistics Coordinator",
     email: "chris.w@tamu.edu",
     dietaryRestrictions: ["Nut-Free"],
@@ -931,10 +1053,65 @@ export const secMembers: SECMember[] = [
   {
     id: "m8",
     name: "Emma Davis",
+    initials: "ED",
     role: "Student Liaison",
     email: "emma.d@tamu.edu",
     dietaryRestrictions: [],
     mealPreference: "Kosher",
+  },
+  {
+    id: "m9",
+    name: "David Kim",
+    initials: "DK",
+    role: "Analytics Lead",
+    email: "david.k@tamu.edu",
+    dietaryRestrictions: [],
+    mealPreference: "None",
+  },
+  {
+    id: "m10",
+    name: "Maria Santos",
+    initials: "MS",
+    role: "Operations Director",
+    email: "maria.s@tamu.edu",
+    dietaryRestrictions: [],
+    mealPreference: "None",
+  },
+  {
+    id: "m11",
+    name: "Jake Wilson",
+    initials: "JW",
+    role: "Outreach Coordinator",
+    email: "jake.w@tamu.edu",
+    dietaryRestrictions: [],
+    mealPreference: "None",
+  },
+  {
+    id: "m12",
+    name: "Emily Park",
+    initials: "EP",
+    role: "Events Coordinator",
+    email: "emily.p@tamu.edu",
+    dietaryRestrictions: [],
+    mealPreference: "Vegetarian",
+  },
+  {
+    id: "m13",
+    name: "Sarah Chen",
+    initials: "SC",
+    role: "Finance Assistant",
+    email: "sarah.c@tamu.edu",
+    dietaryRestrictions: [],
+    mealPreference: "None",
+  },
+  {
+    id: "m14",
+    name: "Michael Ross",
+    initials: "MR",
+    role: "Registration Assistant",
+    email: "michael.r@tamu.edu",
+    dietaryRestrictions: [],
+    mealPreference: "None",
   },
 ]
 
@@ -1264,6 +1441,10 @@ export function getDEICompanies(): CompanyDEI[] {
 
 export function getMemberById(id: string): SECMember | undefined {
   return secMembers.find(m => m.id === id)
+}
+
+export function getMemberByInitials(initials: string): SECMember | undefined {
+  return secMembers.find(m => m.initials === initials)
 }
 
 export function getMemberMeals(memberId: string): MealAssignment[] {
