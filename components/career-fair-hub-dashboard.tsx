@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Image from "next/image"
 import { UserButton } from "@clerk/nextjs"
 import { CompanyTable } from "@/components/company-table"
@@ -10,17 +10,7 @@ import { Analytics as AnalyticsWorkspace } from "@/components/workspaces/analyti
 import { FinanceWorkspace } from "@/components/workspaces/finance-workspace"
 import { HospitalityWorkspace } from "@/components/workspaces/hospitality-workspace"
 import { OperationsWorkspace } from "@/components/workspaces/operations-workspace"
-import { DevAuthDebugPanel } from "@/components/dev-auth-debug-panel"
 import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
 import {
   ClipboardList,
   BarChart2,
@@ -29,17 +19,11 @@ import {
   Utensils,
   Settings,
   AlertCircle,
-  Shield,
-  ChevronDown,
+  Briefcase,
 } from "lucide-react"
-import { getNormalizedCompanies, rawRegistrations, getTotalReceivables, type UserRole } from "@/lib/data"
-import {
-  canViewWorkspace,
-  getAccessibleWorkspaces,
-  getRoleLabel,
-  allRoles,
-  type Workspace,
-} from "@/lib/rbac"
+import { getNormalizedCompanies, rawRegistrations, getTotalReceivables } from "@/lib/data"
+import { canAccessWorkspace } from "@/lib/auth/workspace-access-by-title"
+import type { Workspace } from "@/lib/rbac"
 
 type Tab = "registrations" | "insights" | "analytics" | "finance" | "hospitality" | "operations"
 
@@ -61,22 +45,16 @@ function StatBadge({ count, label, color }: { count: number | string; label: str
   )
 }
 
-function getRoleIcon(role: UserRole) {
-  switch (role) {
-    case "Admin":
-      return <Shield className="h-4 w-4" />
-    case "Registration":
-      return <ClipboardList className="h-4 w-4" />
-    case "Finance":
-      return <DollarSign className="h-4 w-4" />
-    case "Hospitality":
-      return <Utensils className="h-4 w-4" />
-  }
+type CareerFairHubDashboardProps = {
+  secTitle: string
+  allowedWorkspaces: Workspace[]
 }
 
-export function CareerFairHubDashboard() {
+export function CareerFairHubDashboard({
+  secTitle,
+  allowedWorkspaces,
+}: CareerFairHubDashboardProps) {
   const [tab, setTab] = useState<Tab>("registrations")
-  const [role, setRole] = useState<UserRole>("Admin")
 
   const stats = useMemo(() => {
     const companies = getNormalizedCompanies()
@@ -93,11 +71,11 @@ export function CareerFairHubDashboard() {
   const visibleTabs = useMemo(() => {
     return tabConfig.filter((t) => {
       if (!t.workspace) return true
-      return canViewWorkspace(role, t.workspace)
+      return canAccessWorkspace(allowedWorkspaces, t.workspace)
     })
-  }, [role])
+  }, [allowedWorkspaces])
 
-  useMemo(() => {
+  useEffect(() => {
     const currentTabVisible = visibleTabs.some((t) => t.id === tab)
     if (!currentTabVisible && visibleTabs.length > 0) {
       setTab(visibleTabs[0].id)
@@ -128,7 +106,7 @@ export function CareerFairHubDashboard() {
               </h1>
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <Badge
               variant="outline"
               className="border-primary-foreground/30 bg-primary-foreground/10 text-xs text-primary-foreground"
@@ -142,47 +120,13 @@ export function CareerFairHubDashboard() {
                 },
               }}
             />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-2 border border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 hover:text-primary-foreground"
-                >
-                  {getRoleIcon(role)}
-                  <span className="hidden sm:inline">{getRoleLabel(role)}</span>
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>View As</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {allRoles.map((r) => (
-                  <DropdownMenuItem
-                    key={r}
-                    onClick={() => setRole(r)}
-                    className={role === r ? "bg-accent" : ""}
-                  >
-                    <div className="flex w-full items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                        {getRoleIcon(r)}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{getRoleLabel(r)}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {getAccessibleWorkspaces(r).length} workspaces
-                        </p>
-                      </div>
-                      {role === r && (
-                        <Badge variant="secondary" className="ml-auto text-xs">
-                          Active
-                        </Badge>
-                      )}
-                    </div>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div
+              className="flex max-w-[min(100%,18rem)] items-center gap-2 rounded-md border border-primary-foreground/30 bg-primary-foreground/10 px-2.5 py-1.5 text-primary-foreground sm:max-w-xs"
+              title={secTitle}
+            >
+              <Briefcase className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+              <span className="truncate text-xs font-medium leading-tight sm:text-sm">{secTitle}</span>
+            </div>
           </div>
         </div>
       </header>
@@ -201,7 +145,7 @@ export function CareerFairHubDashboard() {
                 label="Pending"
                 color="bg-amber-50 border-amber-200 text-amber-800"
               />
-              {canViewWorkspace(role, "finance") && (
+              {canAccessWorkspace(allowedWorkspaces, "finance") && (
                 <StatBadge
                   count={`$${(stats.receivables / 1000).toFixed(0)}k`}
                   label="Receivables"
@@ -221,7 +165,7 @@ export function CareerFairHubDashboard() {
                   <span>{stats.totalEntries - stats.normalized} duplicates merged</span>
                 </div>
               )}
-              {canViewWorkspace(role, "registrations") && <RegistrationFormDialog />}
+              {canAccessWorkspace(allowedWorkspaces, "registrations") && <RegistrationFormDialog />}
             </div>
           </div>
         </div>
@@ -250,7 +194,7 @@ export function CareerFairHubDashboard() {
         </div>
       </div>
 
-      <main className="relative mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         {tab === "registrations" && (
           <div>
             <div className="mb-4">
@@ -284,16 +228,14 @@ export function CareerFairHubDashboard() {
 
       <footer className="mt-auto border-t border-border bg-card py-4">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <p>TAMU Student Engineering Council &middot; Career Fair Management System</p>
             <p>
-              Viewing as: <span className="font-medium text-foreground">{getRoleLabel(role)}</span>
+              Your role: <span className="font-medium text-foreground">{secTitle}</span>
             </p>
           </div>
         </div>
       </footer>
-
-      <DevAuthDebugPanel />
     </div>
   )
 }
