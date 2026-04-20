@@ -76,18 +76,6 @@ export type CompanyFinancials = {
 }
 
 // =====================
-// NEW: DEI Metadata
-// =====================
-export type CompanyDEI = {
-  companyName: string
-  isMinorityOwned: boolean
-  isWomanOwned: boolean
-  isVeteranOwned: boolean
-  isUnderrepresented: boolean
-  deiCertifications: string[]
-}
-
-// =====================
 // NEW: Timeline / Notes
 // =====================
 export type TimelineEntry = {
@@ -828,92 +816,6 @@ export const companyFinancials: CompanyFinancials[] = [
 ]
 
 // =====================
-// NEW: DEI Mock Data
-// =====================
-export const companyDEI: CompanyDEI[] = [
-  {
-    companyName: "Chevron",
-    isMinorityOwned: false,
-    isWomanOwned: false,
-    isVeteranOwned: false,
-    isUnderrepresented: false,
-    deiCertifications: ["Fortune 500 DEI Leader", "Human Rights Campaign 100"],
-  },
-  {
-    companyName: "ExxonMobil",
-    isMinorityOwned: false,
-    isWomanOwned: false,
-    isVeteranOwned: false,
-    isUnderrepresented: false,
-    deiCertifications: ["NAFE Top Company for Executive Women"],
-  },
-  {
-    companyName: "Texas Instruments",
-    isMinorityOwned: false,
-    isWomanOwned: false,
-    isVeteranOwned: false,
-    isUnderrepresented: false,
-    deiCertifications: ["DiversityInc Top 50", "Best Place to Work for Disability Inclusion"],
-  },
-  {
-    companyName: "Lockheed Martin",
-    isMinorityOwned: false,
-    isWomanOwned: false,
-    isVeteranOwned: true,
-    isUnderrepresented: false,
-    deiCertifications: ["Military Friendly Employer", "VETS Index 5 Star"],
-  },
-  {
-    companyName: "Amazon",
-    isMinorityOwned: false,
-    isWomanOwned: false,
-    isVeteranOwned: false,
-    isUnderrepresented: false,
-    deiCertifications: ["Forbes Best Employers for Diversity"],
-  },
-  {
-    companyName: "Shell",
-    isMinorityOwned: false,
-    isWomanOwned: false,
-    isVeteranOwned: false,
-    isUnderrepresented: true,
-    deiCertifications: ["Catalyst Award Winner"],
-  },
-  {
-    companyName: "Halliburton",
-    isMinorityOwned: false,
-    isWomanOwned: false,
-    isVeteranOwned: true,
-    isUnderrepresented: false,
-    deiCertifications: ["Military Friendly Employer"],
-  },
-  {
-    companyName: "Boeing",
-    isMinorityOwned: false,
-    isWomanOwned: false,
-    isVeteranOwned: true,
-    isUnderrepresented: false,
-    deiCertifications: ["VETS Index 5 Star", "DiversityInc Top 50"],
-  },
-  {
-    companyName: "Microsoft",
-    isMinorityOwned: false,
-    isWomanOwned: false,
-    isVeteranOwned: false,
-    isUnderrepresented: false,
-    deiCertifications: ["Human Rights Campaign 100", "DiversityInc Top 50", "Best Place to Work for Disability Inclusion"],
-  },
-  {
-    companyName: "Schlumberger",
-    isMinorityOwned: false,
-    isWomanOwned: false,
-    isVeteranOwned: false,
-    isUnderrepresented: true,
-    deiCertifications: [],
-  },
-]
-
-// =====================
 // NEW: Timeline Mock Data
 // =====================
 export const companyTimelines: TimelineEntry[] = [
@@ -1411,10 +1313,6 @@ export function getCompanyFinancials(companyName: string): CompanyFinancials | u
   return companyFinancials.find(f => f.companyName === companyName)
 }
 
-export function getCompanyDEI(companyName: string): CompanyDEI | undefined {
-  return companyDEI.find(d => d.companyName === companyName)
-}
-
 export function getCompanyTimeline(companyName: string): TimelineEntry[] {
   return companyTimelines.filter(t => t.companyName === companyName)
 }
@@ -1435,8 +1333,32 @@ export function getTotalReceivables(): number {
   return companyFinancials.reduce((sum, f) => sum + f.balanceDue, 0)
 }
 
-export function getDEICompanies(): CompanyDEI[] {
-  return companyDEI.filter(d => d.isMinorityOwned || d.isWomanOwned || d.isVeteranOwned || d.isUnderrepresented)
+/** Placeholder booth Wi‑Fi / queue info for the registrations detail sheet */
+export type CompanyRegistrationExtras = {
+  wifiDeviceCount: number
+  companyQueue: "Yes" | "No"
+}
+
+export const companyRegistrationExtras: Record<string, CompanyRegistrationExtras> = {
+  Chevron: { wifiDeviceCount: 12, companyQueue: "Yes" },
+  ExxonMobil: { wifiDeviceCount: 18, companyQueue: "No" },
+  "Texas Instruments": { wifiDeviceCount: 8, companyQueue: "Yes" },
+  "Lockheed Martin": { wifiDeviceCount: 14, companyQueue: "No" },
+  Amazon: { wifiDeviceCount: 22, companyQueue: "Yes" },
+  Shell: { wifiDeviceCount: 4, companyQueue: "No" },
+  Halliburton: { wifiDeviceCount: 9, companyQueue: "Yes" },
+  Boeing: { wifiDeviceCount: 11, companyQueue: "No" },
+  Microsoft: { wifiDeviceCount: 20, companyQueue: "Yes" },
+  Schlumberger: { wifiDeviceCount: 3, companyQueue: "No" },
+}
+
+export function getCompanyRegistrationExtras(companyName: string): CompanyRegistrationExtras {
+  return (
+    companyRegistrationExtras[companyName] ?? {
+      wifiDeviceCount: 5,
+      companyQueue: "No",
+    }
+  )
 }
 
 export function getMemberById(id: string): SECMember | undefined {

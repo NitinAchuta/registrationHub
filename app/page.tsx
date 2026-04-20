@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import Image from "next/image"
 import { CompanyTable } from "@/components/company-table"
 import { CompanyInsights } from "@/components/company-insights"
 import { RegistrationFormDialog } from "@/components/registration-form"
-import { ZachryAnalytics } from "@/components/workspaces/zachry-analytics"
+import { Analytics } from "@/components/workspaces/analytics"
 import { FinanceWorkspace } from "@/components/workspaces/finance-workspace"
 import { HospitalityWorkspace } from "@/components/workspaces/hospitality-workspace"
 import { OperationsWorkspace } from "@/components/workspaces/operations-workspace"
@@ -33,7 +34,6 @@ import {
   Utensils,
   Settings,
   AlertCircle,
-  GraduationCap,
   User,
   Shield,
   ChevronDown,
@@ -48,12 +48,12 @@ import {
   type Workspace 
 } from "@/lib/rbac"
 
-type Tab = "registrations" | "insights" | "zachry-analytics" | "finance" | "hospitality" | "operations"
+type Tab = "registrations" | "insights" | "analytics" | "finance" | "hospitality" | "operations"
 
 const tabConfig: { id: Tab; workspace: Workspace | null; label: string; icon: typeof ClipboardList }[] = [
   { id: "registrations", workspace: "registrations", label: "Registrations", icon: ClipboardList },
   { id: "insights", workspace: "registrations", label: "Insights", icon: BarChart2 },
-  { id: "zachry-analytics", workspace: "zachry-analytics", label: "Zachry Analytics", icon: TrendingUp },
+  { id: "analytics", workspace: "analytics", label: "Analytics", icon: TrendingUp },
   { id: "finance", workspace: "finance", label: "Finance", icon: DollarSign },
   { id: "hospitality", workspace: "hospitality", label: "Hospitality", icon: Utensils },
   { id: "operations", workspace: "operations", label: "Operations", icon: Settings },
@@ -119,8 +119,15 @@ export default function Page() {
       <header className="bg-primary text-primary-foreground">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded bg-primary-foreground/10 border border-primary-foreground/20">
-              <GraduationCap className="h-4 w-4 text-primary-foreground" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-primary-foreground/25 bg-white p-1 shadow-sm">
+              <Image
+                src="/sec_logo.png"
+                alt="Student Engineers' Council"
+                width={36}
+                height={36}
+                className="h-full w-full object-contain"
+                priority
+              />
             </div>
             <div>
               <p className="text-xs font-medium text-primary-foreground/70 leading-none">Texas A&amp;M University</p>
@@ -268,7 +275,7 @@ export default function Page() {
           </div>
         )}
 
-        {tab === "zachry-analytics" && <ZachryAnalytics />}
+        {tab === "analytics" && <Analytics />}
         {tab === "finance" && <FinanceWorkspace />}
         {tab === "hospitality" && <HospitalityWorkspace />}
         {tab === "operations" && <OperationsWorkspace />}

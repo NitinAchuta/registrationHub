@@ -2,7 +2,7 @@ import type { UserRole } from "./data"
 
 export type Workspace = 
   | "registrations" 
-  | "zachry-analytics" 
+  | "analytics" 
   | "finance" 
   | "hospitality" 
   | "operations"
@@ -20,8 +20,8 @@ export const workspaces: WorkspaceConfig[] = [
     description: "Manage company registrations and contacts" 
   },
   { 
-    id: "zachry-analytics", 
-    label: "Zachry Analytics", 
+    id: "analytics", 
+    label: "Analytics", 
     description: "Major distribution and recruitment analytics" 
   },
   { 
@@ -43,15 +43,15 @@ export const workspaces: WorkspaceConfig[] = [
 
 // Define which workspaces each role can access
 export const rolePermissions: Record<UserRole, Workspace[]> = {
-  Admin: ["registrations", "zachry-analytics", "finance", "hospitality", "operations"],
-  Registration: ["registrations", "zachry-analytics"],
+  Admin: ["registrations", "analytics", "finance", "hospitality", "operations"],
+  Registration: ["registrations", "analytics"],
   Finance: ["registrations", "finance"],
   Hospitality: ["hospitality", "registrations"],
 }
 
 // Define which data each role can modify (vs. read-only)
 export const roleWritePermissions: Record<UserRole, Workspace[]> = {
-  Admin: ["registrations", "zachry-analytics", "finance", "hospitality", "operations"],
+  Admin: ["registrations", "analytics", "finance", "hospitality", "operations"],
   Registration: ["registrations"],
   Finance: ["finance"],
   Hospitality: ["hospitality"],
@@ -87,7 +87,7 @@ export function getRoleDescription(role: UserRole): string {
     case "Admin":
       return "Full access to all workspaces and data"
     case "Registration":
-      return "Access to Registrations and Zachry Analytics"
+      return "Access to Registrations and Analytics"
     case "Finance":
       return "Access to Finance & Debt and Registration data"
     case "Hospitality":

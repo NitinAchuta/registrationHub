@@ -67,6 +67,7 @@ import {
 import {
   getNormalizedCompanies,
   getCompanyFinancials,
+  getCompanyRegistrationExtras,
   secMembers,
   getMemberByInitials,
   type NormalizedCompany,
@@ -289,6 +290,9 @@ function CompanySheet({
 
   const primary = company?.entries[0]
   const financials = company ? getCompanyFinancials(company.canonicalName) : null
+  const registrationExtras = company
+    ? getCompanyRegistrationExtras(company.canonicalName)
+    : null
 
   // Reset form when company changes
   useMemo(() => {
@@ -651,6 +655,18 @@ function CompanySheet({
                   </span>
                 }
               />
+              {registrationExtras && (
+                <>
+                  <DetailRow
+                    label="# of Wi-Fi devices"
+                    value={registrationExtras.wifiDeviceCount}
+                  />
+                  <DetailRow
+                    label="Company Queue"
+                    value={registrationExtras.companyQueue}
+                  />
+                </>
+              )}
               <DetailRow
                 label="Booth Location"
                 value={
