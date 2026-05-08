@@ -3,17 +3,10 @@
 import { useState, useMemo, useEffect } from "react"
 import Image from "next/image"
 import { UserButton } from "@clerk/nextjs"
-import { CompanyTable } from "@/components/company-table"
-import { CompanyInsights } from "@/components/company-insights"
-import { RegistrationFormDialog } from "@/components/registration-form"
-import { Analytics as AnalyticsWorkspace } from "@/components/workspaces/analytics"
-import { FinanceWorkspace } from "@/components/workspaces/finance-workspace"
-import { HospitalityWorkspace } from "@/components/workspaces/hospitality-workspace"
-import { OperationsWorkspace } from "@/components/workspaces/operations-workspace"
 import { Badge } from "@/components/ui/badge"
 import {
   ClipboardList,
-  BarChart2,
+  Building2,
   TrendingUp,
   DollarSign,
   Utensils,
@@ -21,16 +14,38 @@ import {
   AlertCircle,
   Briefcase,
 } from "lucide-react"
-import { getNormalizedCompanies, rawRegistrations, getTotalReceivables } from "@/lib/data"
 import { canAccessWorkspace } from "@/lib/auth/workspace-access-by-title"
 import type { Workspace } from "@/lib/rbac"
+import type {
+  CompanyRecord,
+  MajorAnalytics,
+  SemesterCode,
+  RegistrationStatus,
+} from "@/lib/types"
+import { ALL_REGISTRATION_STATUSES } from "@/lib/types"
+import { mapRawStatus } from "@/lib/statusMapping"
+import { getPackagePrice } from "@/lib/packagePricing"
+import { semesterLabel } from "@/lib/format"
+import { RegistrationsView } from "@/components/views/registrations-view"
+import { CompanyDashboardView } from "@/components/views/company-dashboard-view"
+import { CareerFairAnalyticsView } from "@/components/views/career-fair-analytics-view"
+import { RegistrationFormDialog } from "@/components/registration-form"
+import { FinanceWorkspace } from "@/components/workspaces/finance-workspace"
+import { HospitalityWorkspace } from "@/components/workspaces/hospitality-workspace"
+import { OperationsWorkspace } from "@/components/workspaces/operations-workspace"
 
-type Tab = "registrations" | "insights" | "analytics" | "finance" | "hospitality" | "operations"
+type Tab =
+  | "registrations"
+  | "company-dashboard"
+  | "career-fair"
+  | "finance"
+  | "hospitality"
+  | "operations"
 
 const tabConfig: { id: Tab; workspace: Workspace | null; label: string; icon: typeof ClipboardList }[] = [
   { id: "registrations", workspace: "registrations", label: "Registrations", icon: ClipboardList },
-  { id: "insights", workspace: "registrations", label: "Insights", icon: BarChart2 },
-  { id: "analytics", workspace: "analytics", label: "Analytics", icon: TrendingUp },
+  { id: "company-dashboard", workspace: "registrations", label: "Company Dashboard", icon: Building2 },
+  { id: "career-fair", workspace: "analytics", label: "Career Fair", icon: TrendingUp },
   { id: "finance", workspace: "finance", label: "Finance", icon: DollarSign },
   { id: "hospitality", workspace: "hospitality", label: "Hospitality", icon: Utensils },
   { id: "operations", workspace: "operations", label: "Operations", icon: Settings },
@@ -45,28 +60,65 @@ function StatBadge({ count, label, color }: { count: number | string; label: str
   )
 }
 
-type CareerFairHubDashboardProps = {
+type Props = {
   secTitle: string
   allowedWorkspaces: Workspace[]
+  semesterOrder: SemesterCode[]
+  currentSemester: SemesterCode
+  majorAnalytics: MajorAnalytics[]
+  allCompanies: CompanyRecord[]
+  registrationCompanies: CompanyRecord[]
 }
 
 export function CareerFairHubDashboard({
   secTitle,
   allowedWorkspaces,
-}: CareerFairHubDashboardProps) {
+  semesterOrder,
+  currentSemester,
+  majorAnalytics,
+  allCompanies,
+  registrationCompanies,
+}: Props) {
   const [tab, setTab] = useState<Tab>("registrations")
 
   const stats = useMemo(() => {
-    const companies = getNormalizedCompanies()
-    const confirmed = companies.filter((c) => c.status === "Confirmed").length
-    const pending = companies.filter((c) => c.status === "Pending").length
-    const waitlisted = companies.filter((c) => c.status === "Waitlisted").length
-    const cancelled = companies.filter((c) => c.status === "Cancelled").length
-    const totalEntries = rawRegistrations.length
-    const normalized = companies.length
-    const receivables = getTotalReceivables()
-    return { confirmed, pending, waitlisted, cancelled, totalEntries, normalized, receivables }
-  }, [])
+    let confirmed = 0
+    let pending = 0
+    let waitlisted = 0
+    let cancelled = 0
+    let receivables = 0
+    let totalEntries = 0
+    for (const c of allCompanies) {
+      const reg = c.currentRegistration
+      const f25 = c.f25Selection
+      if (!reg && !f25) continue
+      totalEntries++
+      const s: RegistrationStatus =
+        mapRawStatus(reg?.status) ??
+        mapRawStatus(f25?.decision) ??
+        "Pending"
+      if (s === "Confirmed" || s === "BTT Confirmed" || s === "1 to 2 Day Accepted") {
+        confirmed++
+        const price = getPackagePrice(reg?.package ?? null) ?? 0
+        receivables += price
+      } else if (s === "Pending" || s === "BTT Pending" || s === "1 to 2 Day Pending") {
+        pending++
+      } else if (s === "Waitlisted") {
+        waitlisted++
+      } else if (s === "Cancelled") {
+        cancelled++
+      }
+    }
+    return {
+      confirmed,
+      pending,
+      waitlisted,
+      cancelled,
+      totalEntries,
+      normalized: totalEntries,
+      receivables,
+    }
+  }, [allCompanies])
 
   const visibleTabs = useMemo(() => {
     return tabConfig.filter((t) => {
@@ -111,7 +163,7 @@ export function CareerFairHubDashboard({
               variant="outline"
               className="border-primary-foreground/30 bg-primary-foreground/10 text-xs text-primary-foreground"
             >
-              Spring 2026
+              {semesterLabel(currentSemester)}
             </Badge>
             <UserButton
               appearance={{
@@ -145,10 +197,16 @@ export function CareerFairHubDashboard({
                 label="Pending"
                 color="bg-amber-50 border-amber-200 text-amber-800"
               />
-              {canAccessWorkspace(allowedWorkspaces, "finance") && (
+              {canAccessWorkspace(allowedWorkspaces, "finance") ? (
                 <StatBadge
                   count={`$${(stats.receivables / 1000).toFixed(0)}k`}
-                  label="Receivables"
+                  label="Est. revenue"
+                  color="bg-blue-50 border-blue-200 text-blue-800"
+                />
+              ) : (
+                <StatBadge
+                  count={stats.waitlisted}
+                  label="Waitlisted"
                   color="bg-blue-50 border-blue-200 text-blue-800"
                 />
               )}
@@ -159,10 +217,12 @@ export function CareerFairHubDashboard({
               />
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {stats.normalized < stats.totalEntries && (
-                <div className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-700">
+              {allCompanies.length > 0 && (
+                <div className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs text-blue-700">
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  <span>{stats.totalEntries - stats.normalized} duplicates merged</span>
+                  <span>
+                    {allCompanies.length} canonical companies (Excel-driven)
+                  </span>
                 </div>
               )}
               {canAccessWorkspace(allowedWorkspaces, "registrations") && <RegistrationFormDialog />}
@@ -198,29 +258,57 @@ export function CareerFairHubDashboard({
         {tab === "registrations" && (
           <div>
             <div className="mb-4">
-              <h2 className="text-lg font-semibold text-balance text-foreground">Company Registrations</h2>
+              <h2 className="text-lg font-semibold text-balance text-foreground">
+                Company Registrations
+              </h2>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                {stats.normalized} unique companies &middot; {stats.totalEntries} total registration entries.
-                Duplicate organization names are automatically normalized.
+                {registrationCompanies.length} companies in the {semesterLabel(currentSemester)} cycle.
+                Click any row for the full profile, internal notes, and chat.
               </p>
             </div>
-            <CompanyTable />
+            <RegistrationsView
+              companies={registrationCompanies}
+              semesterOrder={semesterOrder}
+              currentSemester={currentSemester}
+              majorAnalytics={majorAnalytics}
+            />
           </div>
         )}
 
-        {tab === "insights" && (
+        {tab === "company-dashboard" && (
           <div>
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-balance text-foreground">Company Insights</h2>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-balance text-foreground">Company Dashboard</h2>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Historical engagement analytics and acceptance recommendations for each company.
+                Deep company profile: attendance, hiring, package value, A&amp;M relationship,
+                composite score, flags, and editable internal notes.
               </p>
             </div>
-            <CompanyInsights />
+            <CompanyDashboardView
+              companies={allCompanies}
+              semesterOrder={semesterOrder}
+              majorAnalytics={majorAnalytics}
+            />
           </div>
         )}
 
-        {tab === "analytics" && <AnalyticsWorkspace />}
+        {tab === "career-fair" && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-balance text-foreground">Career Fair Analytics</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Booth allocation, major coverage, selection scoring output, revenue tracking, and
+                deadline alerts.
+              </p>
+            </div>
+            <CareerFairAnalyticsView
+              companies={allCompanies}
+              majorAnalytics={majorAnalytics}
+              semesterOrder={semesterOrder}
+            />
+          </div>
+        )}
+
         {tab === "finance" && <FinanceWorkspace />}
         {tab === "hospitality" && <HospitalityWorkspace />}
         {tab === "operations" && <OperationsWorkspace />}
@@ -232,6 +320,8 @@ export function CareerFairHubDashboard({
             <p>TAMU Student Engineering Council &middot; Career Fair Management System</p>
             <p>
               Your role: <span className="font-medium text-foreground">{secTitle}</span>
+              {" · "}
+              {ALL_REGISTRATION_STATUSES.length} status types tracked
             </p>
           </div>
         </div>
