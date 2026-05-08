@@ -30,6 +30,7 @@ export function semesterLabel(code: string): string {
     S25: "Spring 2025",
     F25: "Fall 2025",
     S26: "Spring 2026",
+    F26: "Fall 2026",
   }
   return map[code] ?? code
 }
@@ -45,6 +46,7 @@ export function shortSemesterLabel(code: string): string {
     S25: "Sp25",
     F25: "Fa25",
     S26: "Sp26",
+    F26: "Fa26",
   }
   return map[code] ?? code
 }

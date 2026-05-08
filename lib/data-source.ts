@@ -8,6 +8,9 @@ import type {
   RegistrationStatus,
   SemesterCode,
 } from "./types"
+import { activeRegistrationSeed, toRegistrationRow } from "./activeRegistrations"
+import { ACTIVE_FAIR } from "./fairConfig"
+import { normalizeCompanyName, getCompanySlug } from "./companyNormalizer"
 import { mapRawStatus } from "./statusMapping"
 
 const dataset = companyData as unknown as CompanyDataset
@@ -17,7 +20,7 @@ export function getDataset(): CompanyDataset {
 }
 
 export function getAllCompanies(): CompanyRecord[] {
-  return dataset.companies
+  return getCompaniesWithActiveRegistrationOverlay()
 }
 
 export function getMajorAnalytics(): MajorAnalytics[] {
@@ -25,28 +28,99 @@ export function getMajorAnalytics(): MajorAnalytics[] {
 }
 
 export function getCompanyById(id: string): CompanyRecord | undefined {
-  return dataset.companies.find((c) => c.id === id)
+  return getCompaniesWithActiveRegistrationOverlay().find((c) => c.id === id)
 }
 
 /**
- * Companies relevant for the current Registrations view: those with a
- * registration record in the latest available semester.
+ * Fall 2026 is the explicit active registration cycle. Excel fair sheets,
+ * including S26_CF, are historical company intelligence and must not be
+ * inferred as current registrations.
  */
 export function getCurrentSemester(): SemesterCode {
-  // pick most recent semester that has any registration data
-  for (let i = dataset.semesterOrder.length - 1; i >= 0; i--) {
-    const sem = dataset.semesterOrder[i]
-    if (dataset.companies.some((c) => c.registrationHistory[sem])) {
-      return sem
-    }
-  }
-  return "S26"
+  return ACTIVE_FAIR.code
 }
 
 export function getRegistrationCompanies(
-  semester: SemesterCode,
+  semester: SemesterCode = ACTIVE_FAIR.code,
 ): CompanyRecord[] {
-  return dataset.companies.filter((c) => Boolean(c.registrationHistory[semester]))
+  return getCompaniesWithActiveRegistrationOverlay().filter(
+    (c) => c.currentRegistration?.semester === semester,
+  )
+}
+
+export function getCompaniesWithActiveRegistrationOverlay(): CompanyRecord[] {
+  const companies: CompanyRecord[] = dataset.companies.map((company) => ({
+    ...company,
+    currentRegistration: null,
+    registrationHistory: { ...company.registrationHistory },
+    sources: [...company.sources],
+  }))
+
+  for (const seed of activeRegistrationSeed) {
+    const seedName = normalizeCompanyName(seed.companyName)
+    const registration = toRegistrationRow(seed)
+    let company = companies.find(
+      (candidate) =>
+        normalizeCompanyName(candidate.canonicalName) === seedName ||
+        candidate.variants.some((variant) => normalizeCompanyName(variant) === seedName),
+    )
+
+    if (!company) {
+      company = createCompanyFromSeed(seed.companyName)
+      companies.push(company)
+    }
+
+    company.currentRegistration = registration
+    company.registrationHistory[ACTIVE_FAIR.code] = registration
+    company.sources = Array.from(
+      new Set([...company.sources, `ActiveRegistrationSeed:${ACTIVE_FAIR.code}`]),
+    )
+    company.industry = company.industry ?? seed.industry
+    company.industryTags = Array.from(new Set([...company.industryTags, seed.industry]))
+    if (!company.variants.includes(seed.companyName)) {
+      company.variants = [...company.variants, seed.companyName]
+    }
+  }
+
+  return companies
+}
+
+function createCompanyFromSeed(companyName: string): CompanyRecord {
+  return {
+    id: getCompanySlug(companyName),
+    canonicalName: companyName,
+    variants: [companyName],
+    sources: [`ActiveRegistrationSeed:${ACTIVE_FAIR.code}`],
+    industry: null,
+    industryTags: [],
+    companyType: null,
+    revenueMillionsUSD: null,
+    marketCapBillionsUSD: null,
+    employees: null,
+    willingToSponsor: null,
+    bachelorHires: null,
+    masterHires: null,
+    doctorateHires: null,
+    totalHires: 0,
+    hiringHistory: {},
+    attendanceHistory: {},
+    semestersAttended: [],
+    packageHistory: {},
+    currentRegistration: null,
+    registrationHistory: {},
+    relationship: {
+      attendedPastFairs: false,
+      outsideEngagement: false,
+      fycfParticipant: false,
+      alumniPresence: false,
+      careerCenterPartner: false,
+      coeDonor: false,
+    },
+    f25Selection: null,
+    f25SortedHistory: null,
+    f25Waitlist: null,
+    majorBuckets: [],
+  }
 }
 
 /**
@@ -56,12 +130,13 @@ export function getRegistrationCompanies(
  */
 export function getEffectiveStatus(
   company: CompanyRecord,
-  currentSemester: SemesterCode = "S26",
+  currentSemester: SemesterCode = ACTIVE_FAIR.code,
 ): RegistrationStatus {
-  const reg = company.registrationHistory[currentSemester]
+  const reg =
+    company.currentRegistration?.semester === currentSemester
+      ? company.currentRegistration
+      : undefined
   const fromReg = mapRawStatus(reg?.status)
   if (fromReg) return fromReg
-  const fromF25 = mapRawStatus(company.f25Selection?.decision)
-  if (fromF25) return fromF25
   return "Pending"
 }

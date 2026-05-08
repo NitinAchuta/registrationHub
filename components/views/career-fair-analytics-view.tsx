@@ -36,23 +36,28 @@ import type {
   CompanyRecord,
   MajorAnalytics,
   RegistrationStatus,
-  SemesterCode,
 } from "@/lib/types"
 import { ALL_REGISTRATION_STATUSES, FINAL_STATUSES } from "@/lib/types"
 import { mapRawStatus, STATUS_BADGE_COLORS } from "@/lib/statusMapping"
 import { DEFAULT_PACKAGE_PRICING, LOCAL_STORAGE_KEYS, getPackagePrice } from "@/lib/packagePricing"
 import { useLocalStorageState } from "@/hooks/use-local-storage"
 import { getCompanyScore } from "@/lib/companyScoring"
-import { getCompanyFlags, getDaysUntilDeadline, getMissingInfoLabels } from "@/lib/companyFlags"
+import { getDaysUntilDeadline, getMissingInfoLabels } from "@/lib/companyFlags"
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format"
 
 type Props = {
   companies: CompanyRecord[]
+  historicalCompanies: CompanyRecord[]
+  activeFairLabel: string
   majorAnalytics: MajorAnalytics[]
-  semesterOrder: SemesterCode[]
 }
 
-export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrder }: Props) {
+export function CareerFairAnalyticsView({
+  companies,
+  historicalCompanies,
+  activeFairLabel,
+  majorAnalytics,
+}: Props) {
   const [packagePricing, setPackagePricing] = useLocalStorageState(
     LOCAL_STORAGE_KEYS.packagePricing,
     DEFAULT_PACKAGE_PRICING,
@@ -73,31 +78,35 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
     )
     for (const c of companies) {
       const reg = c.currentRegistration
-      const s =
-        mapRawStatus(reg?.status) ??
-        mapRawStatus(c.f25Selection?.decision)
+      const s = mapRawStatus(reg?.status)
       if (s) counts[s]++
     }
     return counts
   }, [companies])
 
-  const total = companies.filter((c) => c.currentRegistration || c.f25Selection).length
+  const total = companies.filter((c) => c.currentRegistration).length
 
-  // Booth totals from major analytics
+  const activeMajorRows = useMemo(() => {
+    const counts = new Map<string, { major: string; companies: number; requestedBooths: number }>()
+    for (const c of companies) {
+      const reg = c.currentRegistration
+      if (!reg) continue
+      const majors = reg.majors.length > 0 ? reg.majors : reg.topMajor ? [reg.topMajor] : []
+      for (const major of majors) {
+        const current = counts.get(major) ?? { major, companies: 0, requestedBooths: 0 }
+        current.companies += 1
+        counts.set(major, current)
+      }
+    }
+    return Array.from(counts.values()).sort((a, b) => b.companies - a.companies)
+  }, [companies])
+
+  // Active-cycle booth totals. The current Chevron filler seed does
+  // not include booth-count requests, so requested/confirmed booth counts stay 0
+  // until an active registration supplies that field.
   const boothTotals = useMemo(() => {
-    return majorAnalytics.reduce(
-      (acc, m) => ({
-        requested: acc.requested + (m.requestedWedBooths + m.requestedThuBooths),
-        confirmed: acc.confirmed + m.totalBoothsConfirmed,
-        allocated: acc.allocated + m.allocatedBooths,
-        wedReq: acc.wedReq + m.requestedWedBooths,
-        wedFinal: acc.wedFinal + m.finalWedBooths,
-        thuReq: acc.thuReq + m.requestedThuBooths,
-        thuFinal: acc.thuFinal + m.finalThuBooths,
-      }),
-      { requested: 0, confirmed: 0, allocated: 0, wedReq: 0, wedFinal: 0, thuReq: 0, thuFinal: 0 },
-    )
-  }, [majorAnalytics])
+    return { requested: 0, confirmed: 0, allocated: 0, wedReq: 0, wedFinal: 0, thuReq: 0, thuFinal: 0 }
+  }, [])
 
   // Revenue tracking
   const revenue = useMemo(() => {
@@ -109,9 +118,7 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
       const reg = c.currentRegistration
       if (!reg?.package) continue
       const status =
-        mapRawStatus(reg.status) ??
-        mapRawStatus(c.f25Selection?.decision) ??
-        "Pending"
+        mapRawStatus(reg.status) ?? "Pending"
       const price = getPackagePrice(reg.package, packagePricing) ?? 0
       const tier = reg.package.tier ?? "Other"
       byPackage[tier] ??= { count: 0, revenue: 0 }
@@ -135,13 +142,11 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
   const [search, setSearch] = useState("")
 
   const selectionRows = useMemo(() => {
-    return companies
+    return historicalCompanies
       .filter((c) => c.f25Selection)
       .map((c) => {
         const status =
-          mapRawStatus(c.currentRegistration?.status) ??
-          mapRawStatus(c.f25Selection?.decision) ??
-          "Pending"
+          mapRawStatus(c.f25Selection?.decision) ?? "Pending"
         const scoring = getCompanyScore(c, majorAnalytics, status)
         return {
           company: c,
@@ -162,33 +167,30 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
         return true
       })
       .sort((a, b) => b.scoring.totalScore - a.scoring.totalScore)
-  }, [companies, majorAnalytics, search, decisionFilter, majorFilter, scoreMin, highValueOnly])
+  }, [historicalCompanies, majorAnalytics, search, decisionFilter, majorFilter, scoreMin, highValueOnly])
 
   const decisionOptions = useMemo(() => {
     const set = new Set<string>()
-    companies.forEach((c) => {
+    historicalCompanies.forEach((c) => {
       if (c.f25Selection?.decision) set.add(c.f25Selection.decision)
     })
     return Array.from(set).sort()
-  }, [companies])
+  }, [historicalCompanies])
 
   const majorOptions = useMemo(() => {
     const set = new Set<string>()
-    companies.forEach((c) => {
+    historicalCompanies.forEach((c) => {
       if (c.f25Selection?.primaryMajor) set.add(c.f25Selection.primaryMajor)
     })
     return Array.from(set).sort()
-  }, [companies])
+  }, [historicalCompanies])
 
   // Notifications
   const notifications = useMemo(() => {
     const items: Array<{ id: string; type: "warning" | "danger" | "info"; title: string; description: string; companyId?: string }> = []
     for (const c of companies) {
       const reg = c.currentRegistration
-      const status =
-        mapRawStatus(reg?.status) ??
-        mapRawStatus(c.f25Selection?.decision) ??
-        null
+      const status = mapRawStatus(reg?.status) ?? null
       const assignedTo = assignments[c.id] ?? "Unassigned"
       const deadline = getDaysUntilDeadline(c)
       const missing = getMissingInfoLabels(c)
@@ -223,34 +225,17 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
         })
       }
     }
-    // under-indexed majors
-    for (const m of majorAnalytics) {
-      if (m.needMore) {
-        items.push({
-          id: `major-${m.major}-needmore`,
-          type: "info",
-          title: `Major ${m.major} is under-indexed`,
-          description: `Allocation only ${formatPercent(m.fillPercent ?? 0)}. Recruit more companies for ${m.major}.`,
-        })
-      }
-    }
     return items.sort((a, b) => {
       const order: Record<typeof a.type, number> = { danger: 0, warning: 1, info: 2 }
       return order[a.type] - order[b.type]
     })
-  }, [companies, assignments, majorAnalytics])
+  }, [companies, assignments])
 
   const funnel = useMemo(() => {
     const registered = total
     const confirmed = statusCounts.Confirmed + statusCounts["BTT Confirmed"] + statusCounts["1 to 2 Day Accepted"]
-    let attended = 0
-    let hires = 0
-    for (const c of companies) {
-      if (c.semestersAttended.includes("F25")) attended++
-      hires += c.totalHires
-    }
-    return { registered, confirmed, attended, hires }
-  }, [companies, statusCounts, total])
+    return { registered, confirmed, attended: 0, hires: 0 }
+  }, [statusCounts, total])
 
   return (
     <div className="space-y-4">
@@ -259,7 +244,7 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="booths">Booth analytics</TabsTrigger>
           <TabsTrigger value="majors">Majors</TabsTrigger>
-          <TabsTrigger value="selection">Selection output</TabsTrigger>
+          <TabsTrigger value="selection">Historical selection output</TabsTrigger>
           <TabsTrigger value="revenue">Revenue</TabsTrigger>
           <TabsTrigger value="notifications">
             <span className="flex items-center gap-1.5">
@@ -296,8 +281,8 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
               </p>
             </Card>
             <Card className="border-border bg-card p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Majors tracked</p>
-              <p className="mt-1 text-2xl font-bold">{majorAnalytics.length}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Active majors</p>
+              <p className="mt-1 text-2xl font-bold">{activeMajorRows.length}</p>
             </Card>
           </div>
 
@@ -312,41 +297,74 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
                 rate={funnel.registered > 0 ? (funnel.confirmed / funnel.registered) * 100 : 0}
               />
               <FunnelStep
-                label="Attended (F25)"
+                label="Attended"
                 value={funnel.attended}
                 rate={funnel.confirmed > 0 ? (funnel.attended / funnel.confirmed) * 100 : 0}
-                note="Based on F25 attendance only"
+                note={`${activeFairLabel} attendance not available yet`}
               />
               <FunnelStep
                 label="Hires"
                 value={funnel.hires}
                 rate={funnel.attended > 0 ? (funnel.hires / Math.max(1, funnel.attended)) * 100 : 0}
-                note="Across all available semesters"
+                note={`${activeFairLabel} outcomes not available yet`}
               />
             </div>
           </Card>
 
           <Card className="p-4">
-            <h3 className="text-sm font-semibold">Allotted vs confirmed booths</h3>
+            <h3 className="text-sm font-semibold">{activeFairLabel} booth data</h3>
             <div className="mt-3 grid grid-cols-2 gap-4 md:grid-cols-3">
               <BoothBar label="Wed requested → final" req={boothTotals.wedReq} fin={boothTotals.wedFinal} />
               <BoothBar label="Thu requested → final" req={boothTotals.thuReq} fin={boothTotals.thuFinal} />
               <BoothBar label="Allocated → confirmed" req={boothTotals.allocated} fin={boothTotals.confirmed} />
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              The active {activeFairLabel} Chevron filler registration does not include requested booth
+              counts yet, so booth totals remain 0 until active registration data includes them.
+            </p>
+          </Card>
+
+          <Card className="p-4">
+            <h3 className="text-sm font-semibold">Historical Context</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Spring 2026, Fall 2025, and earlier Excel records are retained as company
+              background and benchmark data, not active {activeFairLabel} registrations.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <FunnelStep
+                label="Historical companies"
+                value={historicalCompanies.length}
+                note="Excel-driven background profiles"
+              />
+              <FunnelStep
+                label="S26 attendees"
+                value={historicalCompanies.filter((c) => c.semestersAttended.includes("S26")).length}
+                note="Historical benchmark"
+              />
+              <FunnelStep
+                label="F25 attendees"
+                value={historicalCompanies.filter((c) => c.semestersAttended.includes("F25")).length}
+                note="Historical benchmark"
+              />
+              <FunnelStep
+                label="Benchmark majors"
+                value={majorAnalytics.length}
+                note="From F25 Manual Analytics"
+              />
             </div>
           </Card>
         </TabsContent>
 
         <TabsContent value="booths" className="space-y-4">
           <Card className="p-4">
-            <h3 className="text-sm font-semibold">Requested vs confirmed booths by major</h3>
+            <h3 className="text-sm font-semibold">{activeFairLabel} active majors by registration</h3>
             <div className="mt-3" style={{ height: 360 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={majorAnalytics.map((m) => ({
+                  data={activeMajorRows.map((m) => ({
                     major: m.major,
-                    Requested: m.requestedWedBooths + m.requestedThuBooths,
-                    Confirmed: m.totalBoothsConfirmed,
-                    Allocated: m.allocatedBooths,
+                    Companies: m.companies,
+                    Requested: m.requestedBooths,
                   }))}
                   margin={{ top: 10, right: 10, left: 0, bottom: 24 }}
                 >
@@ -355,16 +373,19 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="Allocated" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="Requested" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Confirmed" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Companies" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </Card>
 
           <Card className="p-4">
-            <h3 className="text-sm font-semibold">Booth shortage / surplus</h3>
+            <h3 className="text-sm font-semibold">Historical benchmark: booth shortage / surplus</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              This table uses prior Excel benchmark data and is not counted as {activeFairLabel} active
+              progress.
+            </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
@@ -404,49 +425,37 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
 
         <TabsContent value="majors" className="space-y-4">
           <Card className="p-4">
-            <h3 className="text-sm font-semibold">Majors overview</h3>
+            <h3 className="text-sm font-semibold">{activeFairLabel} active major coverage</h3>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 text-left">Major</th>
-                    <th className="px-3 py-2 text-right">Allocated</th>
-                    <th className="px-3 py-2 text-right">Confirmed</th>
-                    <th className="px-3 py-2 text-right">Fill %</th>
-                    <th className="px-3 py-2 text-right">Acceptance</th>
-                    <th className="px-3 py-2 text-left">Index</th>
+                    <th className="px-3 py-2 text-right">Active companies</th>
+                    <th className="px-3 py-2 text-right">Requested booths</th>
+                    <th className="px-3 py-2 text-left">Context</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {majorAnalytics.map((m) => (
+                  {activeMajorRows.map((m) => (
                     <tr key={m.major} className="border-t border-border">
                       <td className="px-3 py-2 font-medium">{m.major}</td>
-                      <td className="px-3 py-2 text-right">{formatNumber(m.allocatedBooths)}</td>
-                      <td className="px-3 py-2 text-right">{formatNumber(m.totalBoothsConfirmed)}</td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Progress value={m.fillPercent ?? 0} className="w-16 h-1.5" />
-                          {formatPercent(m.fillPercent ?? null)}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {m.acceptanceRate != null ? formatPercent(m.acceptanceRate * 100) : "—"}
-                      </td>
+                      <td className="px-3 py-2 text-right">{formatNumber(m.companies)}</td>
+                      <td className="px-3 py-2 text-right">{formatNumber(m.requestedBooths)}</td>
                       <td className="px-3 py-2">
-                        {m.needMore ? (
-                          <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
-                            Under-indexed
-                          </Badge>
-                        ) : m.needLess ? (
-                          <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">
-                            Over-indexed
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Balanced</span>
-                        )}
+                        <span className="text-xs text-muted-foreground">
+                          Active {activeFairLabel} only
+                        </span>
                       </td>
                     </tr>
                   ))}
+                  {activeMajorRows.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                        No {activeFairLabel} active majors yet.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -456,7 +465,7 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
             <Card className="border-blue-200 bg-blue-50 p-4 text-blue-900">
               <h3 className="flex items-center gap-2 text-sm font-semibold">
                 <AlertCircle className="h-4 w-4" />
-                Under-indexed majors lacking representation
+                Historical benchmark: under-indexed majors lacking representation
               </h3>
               <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-3">
                 {majorAnalytics
@@ -474,6 +483,13 @@ export function CareerFairAnalyticsView({ companies, majorAnalytics, semesterOrd
 
         <TabsContent value="selection" className="space-y-4">
           <Card className="p-4">
+            <div className="mb-3">
+              <h3 className="text-sm font-semibold">Historical F25 company selection output</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                This table is a benchmark from the uploaded Fall 2025 selection workbook. It does
+                not affect {activeFairLabel} active registration counts.
+              </p>
+            </div>
             <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
               <Input
                 value={search}

@@ -42,10 +42,16 @@ import { formatCurrency, formatNumber, semesterLabel, shortSemesterLabel } from 
 type Props = {
   companies: CompanyRecord[]
   semesterOrder: SemesterCode[]
+  currentSemester: SemesterCode
   majorAnalytics: MajorAnalytics[]
 }
 
-export function CompanyDashboardView({ companies, semesterOrder, majorAnalytics }: Props) {
+export function CompanyDashboardView({
+  companies,
+  semesterOrder,
+  currentSemester,
+  majorAnalytics,
+}: Props) {
   const sorted = useMemo(
     () =>
       [...companies].sort((a, b) =>
@@ -72,15 +78,18 @@ export function CompanyDashboardView({ companies, semesterOrder, majorAnalytics 
 
   const status: RegistrationStatus = useMemo(() => {
     if (!selected) return "Pending"
-    return (
-      mapRawStatus(selected.currentRegistration?.status) ??
-      mapRawStatus(selected.f25Selection?.decision) ??
-      "Pending"
-    )
+    return mapRawStatus(selected.currentRegistration?.status) ?? "Pending"
   }, [selected])
 
   const scoring = useMemo(
-    () => (selected ? getCompanyScore(selected, majorAnalytics, status) : null),
+    () =>
+      selected
+        ? getCompanyScore(
+            selected,
+            majorAnalytics,
+            selected.currentRegistration ? status : null,
+          )
+        : null,
     [selected, majorAnalytics, status],
   )
 
@@ -90,21 +99,18 @@ export function CompanyDashboardView({ companies, semesterOrder, majorAnalytics 
       company: selected,
       scoring,
       status,
-      assignedTo: assignments[selected.id] ?? "Unassigned",
+      assignedTo: assignments[`${currentSemester}:${selected.id}`] ?? "Unassigned",
       majorAnalytics,
     })
   }, [selected, scoring, status, assignments, majorAnalytics])
 
-  // Top recommended companies (high score, current cycle activity)
+  // Top recommended companies from the historical/background dataset.
   const topRecommended = useMemo(() => {
     return sorted
-      .filter((c) => c.currentRegistration || c.f25Selection)
+      .filter((c) => c.currentRegistration || c.f25Selection || c.semestersAttended.length > 0)
       .map((c) => {
-        const s =
-          mapRawStatus(c.currentRegistration?.status) ??
-          mapRawStatus(c.f25Selection?.decision) ??
-          "Pending"
-        const sc = getCompanyScore(c, majorAnalytics, s)
+        const s = mapRawStatus(c.currentRegistration?.status) ?? "Pending"
+        const sc = getCompanyScore(c, majorAnalytics, c.currentRegistration ? s : null)
         return { company: c, scoring: sc, status: s }
       })
       .sort((a, b) => b.scoring.totalScore - a.scoring.totalScore)
@@ -194,7 +200,15 @@ export function CompanyDashboardView({ companies, semesterOrder, majorAnalytics 
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className={STATUS_BADGE_COLORS[status]}>{status}</Badge>
+            {reg ? (
+              <Badge variant="outline" className={STATUS_BADGE_COLORS[status]}>
+                {semesterLabel(currentSemester)} {status}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-muted/50 text-muted-foreground border-border">
+                No active {semesterLabel(currentSemester)} registration
+              </Badge>
+            )}
             {reg?.package?.tier && (
               <Badge variant="outline" className={PACKAGE_BADGE_COLORS[reg.package.tier] ?? ""}>
                 {reg.package.tier} {reg.package.days ?? ""}
@@ -212,6 +226,36 @@ export function CompanyDashboardView({ companies, semesterOrder, majorAnalytics 
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
+          <Card
+            className={`p-4 ${
+              reg
+                ? "border-emerald-200 bg-emerald-50/60"
+                : "border-border bg-muted/20"
+            }`}
+          >
+            <h3 className="text-sm font-semibold text-foreground">
+              Current {semesterLabel(currentSemester)} Registration
+            </h3>
+            {reg ? (
+              <div className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+                <KV label="Status" value={status} />
+                <KV label="Package" value={reg.package?.tier ?? reg.packageRaw ?? "—"} />
+                <KV label="Days" value={reg.daysAttending ?? "—"} />
+                <KV label="Booth" value={reg.boothLocation ?? "—"} />
+                <KV label="Rep count" value={String(reg.repCount ?? "—")} />
+                <KV
+                  label="Balance due"
+                  value={reg.balanceDue != null ? formatCurrency(reg.balanceDue) : "—"}
+                />
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-muted-foreground">
+                No active {semesterLabel(currentSemester)} registration yet. Historical career fair
+                background is still available below.
+              </p>
+            )}
+          </Card>
+
           {/* Overview KPI grid */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <KPI label="Type" value={selected.companyType ?? "—"} icon={Building2} />
@@ -233,7 +277,7 @@ export function CompanyDashboardView({ companies, semesterOrder, majorAnalytics 
           {/* Attendance chart */}
           <Card className="p-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Attendance &amp; hiring history</h3>
+              <h3 className="text-sm font-semibold">Historical Career Fair Background</h3>
               <Badge variant="outline" className="bg-muted/50 text-xs">
                 {selected.semestersAttended.length} semesters attended
               </Badge>
@@ -481,8 +525,8 @@ export function CompanyDashboardView({ companies, semesterOrder, majorAnalytics 
         majorAnalytics={majorAnalytics}
         open={profileOpen}
         onClose={() => setProfileOpen(false)}
-        assignedTo={assignments[selected.id] ?? "Unassigned"}
-        onChangeAssignment={(v) => setAssignments((prev) => ({ ...prev, [selected.id]: v }))}
+        assignedTo={assignments[`${currentSemester}:${selected.id}`] ?? "Unassigned"}
+        onChangeAssignment={(v) => setAssignments((prev) => ({ ...prev, [`${currentSemester}:${selected.id}`]: v }))}
       />
     </div>
   )

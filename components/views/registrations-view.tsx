@@ -125,7 +125,7 @@ export function RegistrationsView({
       const reg = c.registrationHistory[currentSemester] ?? c.currentRegistration
       const baseStatus: RegistrationStatus =
         mapRawStatus(reg?.status) ?? mapRawStatus(c.f25Selection?.decision) ?? "Pending"
-      const assignedTo = assignments[c.id] ?? "Unassigned"
+      const assignedTo = assignments[`${currentSemester}:${c.id}`] ?? "Unassigned"
       const scoring = getCompanyScore(c, majorAnalytics, baseStatus)
       const missing = getMissingInfoLabels(c)
       const deadline = getDaysUntilDeadline(c)
@@ -430,7 +430,7 @@ export function RegistrationsView({
                     <Select
                       value={assignedTo}
                       onValueChange={(v) =>
-                        setAssignments((prev) => ({ ...prev, [company.id]: v }))
+                        setAssignments((prev) => ({ ...prev, [`${currentSemester}:${company.id}`]: v }))
                       }
                     >
                       <SelectTrigger className="h-7 w-32 text-xs">
@@ -631,7 +631,8 @@ function CompanyDrawer({
   if (!company) return <Sheet open={false} onOpenChange={() => onClose()}><SheetContent /></Sheet>
 
   const reg = company.registrationHistory[currentSemester] ?? company.currentRegistration
-  const assignedTo = assignments[company.id] ?? "Unassigned"
+  const assignmentKey = `${currentSemester}:${company.id}`
+  const assignedTo = assignments[assignmentKey] ?? "Unassigned"
   const status: RegistrationStatus =
     mapRawStatus(reg?.status) ??
     mapRawStatus(company.f25Selection?.decision) ??
@@ -648,7 +649,7 @@ function CompanyDrawer({
     resolvedMissingInfo: resolvedMissing[company.id],
   })
   const flags = getCompanyFlags({ company, scoring, status, assignedTo, majorAnalytics })
-  const repCount = (reg?.repsDay1 ?? 0) + (reg?.repsDay2 ?? 0)
+  const repCount = reg?.repCount ?? (reg?.repsDay1 ?? 0) + (reg?.repsDay2 ?? 0)
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -656,7 +657,7 @@ function CompanyDrawer({
         <SheetHeader>
           <SheetTitle className="text-balance">{company.canonicalName}</SheetTitle>
           <SheetDescription>
-            {company.industry ?? "Industry not on file"}
+            {semesterLabel(currentSemester)} Registration · {company.industry ?? "Industry not on file"}
             {company.variants.length > 1 ? ` · ${company.variants.length} variants merged` : ""}
           </SheetDescription>
         </SheetHeader>
@@ -665,7 +666,7 @@ function CompanyDrawer({
           {/* Top summary */}
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className={STATUS_BADGE_COLORS[status]}>
-              {status}
+              {semesterLabel(currentSemester)} {status}
             </Badge>
             {reg?.package?.tier && (
               <Badge variant="outline" className={PACKAGE_BADGE_COLORS[reg.package.tier] ?? ""}>
@@ -690,8 +691,8 @@ function CompanyDrawer({
             <div className="grid grid-cols-3 gap-2 text-sm">
               <KV label="Days" value={dayLabelFromDaysAttending(reg?.daysAttending)} />
               <KV label="Reps" value={String(repCount || "—")} />
-              <KV label="Powered" value={reg?.wifi ? "Yes" : "—"} icon={Zap} />
-              <KV label="Wi-Fi" value={reg?.wifi ?? "—"} icon={Wifi} />
+              <KV label="Power" value={reg?.powerRequired ?? (reg?.wifi ? "Required" : "—")} icon={Zap} />
+              <KV label="Powered devices" value={String(reg?.poweredDevices ?? "—")} icon={Wifi} />
               <KV label="Booth" value={reg?.boothLocation ?? "—"} />
               <KV label="Attendee" value={reg?.attendeeType ?? "—"} />
             </div>
@@ -700,7 +701,7 @@ function CompanyDrawer({
           <Section title="SEC assignment">
             <Select
               value={assignedTo}
-              onValueChange={(v) => setAssignments((prev) => ({ ...prev, [company.id]: v }))}
+              onValueChange={(v) => setAssignments((prev) => ({ ...prev, [assignmentKey]: v }))}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -724,10 +725,21 @@ function CompanyDrawer({
             <div className="grid grid-cols-2 gap-2 text-sm">
               <KV label="Package" value={reg?.package ? `${reg.package.tier ?? ""} ${reg.package.days ?? ""}`.trim() : "—"} />
               <KV label="Virtual fair" value={reg?.virtualFair ? "Yes" : "No"} />
-              <KV label="Wi-Fi devices" value={reg?.wifi ?? "—"} />
-              <KV label="Sister co." value={reg?.sisterCompanyPlacement ?? "—"} />
+              <KV label="Wi-Fi requested" value={reg?.wifiRequested ?? reg?.wifi ?? "—"} />
+              <KV label="Company queue" value={reg?.companyQueue ?? "—"} />
               <KV label="Booth" value={reg?.boothLocation ?? "—"} />
               <KV label="Attendee type" value={reg?.attendeeType ?? "—"} />
+            </div>
+          </Section>
+
+          <Section title="Financial snapshot">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <KV
+                label="Balance due"
+                value={reg?.balanceDue != null ? `$${reg.balanceDue.toLocaleString()}` : "—"}
+              />
+              <KV label="Last paid" value={reg?.lastPaid ?? "—"} />
+              <KV label="Payment status" value={(reg?.balanceDue ?? 0) > 0 ? "Balance due" : "—"} />
             </div>
           </Section>
 
@@ -798,13 +810,12 @@ function CompanyDrawer({
                   {status}
                 </Badge>
                 <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  From Excel
+                  Active seed
                 </span>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                Status is sourced from the registration / selection workbook for{" "}
-                {semesterLabel(currentSemester)} and earlier. To change it, update the Excel file
-                and re-run <code className="rounded bg-muted px-1">npm run gen:data</code>.
+                Status is sourced from the active {semesterLabel(currentSemester)} registration
+                seed. Historical Excel statuses remain read-only background data.
               </p>
             </div>
           </Section>
@@ -816,7 +827,7 @@ function CompanyDrawer({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setAssignments((prev) => ({ ...prev, [company.id]: "Aryan" }))}
+              onClick={() => setAssignments((prev) => ({ ...prev, [assignmentKey]: "Aryan" }))}
             >
               Assign to me
             </Button>
@@ -856,12 +867,13 @@ function CompanyDetailModalLauncher({
   setAssignments: (next: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) => void
 }) {
   const reg = company.registrationHistory[currentSemester] ?? company.currentRegistration
+  const assignmentKey = `${currentSemester}:${company.id}`
   const status: RegistrationStatus =
     mapRawStatus(reg?.status) ??
     mapRawStatus(company.f25Selection?.decision) ??
     "Pending"
   const scoring = getCompanyScore(company, majorAnalytics, status)
-  const assignedTo = assignments[company.id] ?? "Unassigned"
+  const assignedTo = assignments[assignmentKey] ?? "Unassigned"
   return (
     <CompanyDetailModal
       company={company}
@@ -871,7 +883,7 @@ function CompanyDetailModalLauncher({
       majorAnalytics={majorAnalytics}
       open={open}
       onClose={onClose}
-      onChangeAssignment={(v) => setAssignments((prev) => ({ ...prev, [company.id]: v }))}
+      onChangeAssignment={(v) => setAssignments((prev) => ({ ...prev, [assignmentKey]: v }))}
       assignedTo={assignedTo}
     />
   )

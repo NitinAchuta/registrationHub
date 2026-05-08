@@ -88,15 +88,12 @@ export function CareerFairHubDashboard({
     let cancelled = 0
     let receivables = 0
     let totalEntries = 0
-    for (const c of allCompanies) {
+    for (const c of registrationCompanies) {
       const reg = c.currentRegistration
-      const f25 = c.f25Selection
-      if (!reg && !f25) continue
+      if (!reg) continue
       totalEntries++
       const s: RegistrationStatus =
-        mapRawStatus(reg?.status) ??
-        mapRawStatus(f25?.decision) ??
-        "Pending"
+        mapRawStatus(reg.status) ?? "Pending"
       if (s === "Confirmed" || s === "BTT Confirmed" || s === "1 to 2 Day Accepted") {
         confirmed++
         const price = getPackagePrice(reg?.package ?? null) ?? 0
@@ -118,7 +115,7 @@ export function CareerFairHubDashboard({
       normalized: totalEntries,
       receivables,
     }
-  }, [allCompanies])
+  }, [registrationCompanies])
 
   const visibleTabs = useMemo(() => {
     return tabConfig.filter((t) => {
@@ -221,7 +218,8 @@ export function CareerFairHubDashboard({
                 <div className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs text-blue-700">
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                   <span>
-                    {allCompanies.length} canonical companies (Excel-driven)
+                    {registrationCompanies.length} active {semesterLabel(currentSemester)} registration
+                    {registrationCompanies.length === 1 ? "" : "s"}
                   </span>
                 </div>
               )}
@@ -262,8 +260,9 @@ export function CareerFairHubDashboard({
                 Company Registrations
               </h2>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                {registrationCompanies.length} companies in the {semesterLabel(currentSemester)} cycle.
-                Click any row for the full profile, internal notes, and chat.
+                {registrationCompanies.length} active {semesterLabel(currentSemester)} registration
+                {registrationCompanies.length === 1 ? "" : "s"}. Historical fair data is
+                available in each company profile.
               </p>
             </div>
             <RegistrationsView
@@ -280,13 +279,14 @@ export function CareerFairHubDashboard({
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-balance text-foreground">Company Dashboard</h2>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Deep company profile: attendance, hiring, package value, A&amp;M relationship,
-                composite score, flags, and editable internal notes.
+                Company background, historical attendance, hiring outcomes, relationship data,
+                and active registration details.
               </p>
             </div>
             <CompanyDashboardView
               companies={allCompanies}
               semesterOrder={semesterOrder}
+              currentSemester={currentSemester}
               majorAnalytics={majorAnalytics}
             />
           </div>
@@ -297,21 +297,24 @@ export function CareerFairHubDashboard({
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-balance text-foreground">Career Fair Analytics</h2>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Booth allocation, major coverage, selection scoring output, revenue tracking, and
-                deadline alerts.
+                {semesterLabel(currentSemester)} registration progress with historical benchmarks
+                from prior fairs.
               </p>
             </div>
             <CareerFairAnalyticsView
-              companies={allCompanies}
+              companies={registrationCompanies}
+              historicalCompanies={allCompanies}
+              activeFairLabel={semesterLabel(currentSemester)}
               majorAnalytics={majorAnalytics}
-              semesterOrder={semesterOrder}
             />
           </div>
         )}
 
         {tab === "finance" && <FinanceWorkspace />}
         {tab === "hospitality" && <HospitalityWorkspace />}
-        {tab === "operations" && <OperationsWorkspace />}
+        {tab === "operations" && (
+          <OperationsWorkspace activeFairLabel={semesterLabel(currentSemester)} activeCompanyCount={registrationCompanies.length} />
+        )}
       </main>
 
       <footer className="mt-auto border-t border-border bg-card py-4">

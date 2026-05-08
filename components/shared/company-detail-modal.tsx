@@ -63,6 +63,7 @@ import { getCompanyFlags, getMissingInfoLabels, getDaysUntilDeadline } from "@/l
 import { STATUS_BADGE_COLORS, PACKAGE_BADGE_COLORS } from "@/lib/statusMapping"
 import { LOCAL_STORAGE_KEYS, getPackagePrice } from "@/lib/packagePricing"
 import { useLocalStorageState } from "@/hooks/use-local-storage"
+import { ACTIVE_FAIR } from "@/lib/fairConfig"
 
 type Props = {
   company: CompanyRecord | null
@@ -124,9 +125,9 @@ export function CompanyDetailModal({
 
   if (!company || !scoring) return null
   const reg = company.currentRegistration
-  const missing = getMissingInfoLabels(company)
+  const missing = reg ? getMissingInfoLabels(company) : []
   const deadlineDays = getDaysUntilDeadline(company)
-  const repCount = (reg?.repsDay1 ?? 0) + (reg?.repsDay2 ?? 0)
+  const repCount = reg?.repCount ?? (reg?.repsDay1 ?? 0) + (reg?.repsDay2 ?? 0)
 
   const addNote = (category: CoordinatorNote["category"], text: string) => {
     if (!text.trim()) return
@@ -178,9 +179,15 @@ export function CompanyDetailModal({
               </DialogDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className={STATUS_BADGE_COLORS[status]}>
-                {status}
-              </Badge>
+              {reg ? (
+                <Badge variant="outline" className={STATUS_BADGE_COLORS[status]}>
+                  {ACTIVE_FAIR.label} {status}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-muted/50 text-muted-foreground border-border">
+                  No active {ACTIVE_FAIR.label} registration
+                </Badge>
+              )}
               {reg?.package?.tier && (
                 <Badge variant="outline" className={PACKAGE_BADGE_COLORS[reg.package.tier] ?? ""}>
                   {reg.package.tier} {reg.package.days ?? ""}
@@ -265,7 +272,7 @@ export function CompanyDetailModal({
             <TabsContent value="registration" className="space-y-4">
               {!reg && (
                 <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                  No current registration on file for {semesterLabel(semesterOrder[semesterOrder.length - 1])}.
+                  No active {ACTIVE_FAIR.label} registration yet.
                 </div>
               )}
               {reg && (
@@ -276,8 +283,8 @@ export function CompanyDetailModal({
                       <Stat label="Days" value={dayLabelFromDaysAttending(reg.daysAttending)} />
                       <Stat
                         label="Power"
-                        value={reg.wifi || "—"}
-                        sub={reg.wifi ? "Wi-Fi connections planned" : undefined}
+                        value={reg.powerRequired ?? (reg.wifi ? "Required" : "—")}
+                        sub={reg.poweredDevices ? `${reg.poweredDevices} powered devices` : undefined}
                       />
                       <Stat label="Reps" value={String(repCount || "—")} />
                     </div>
@@ -286,15 +293,17 @@ export function CompanyDetailModal({
                       <Field label="Booth" value={reg.boothLocation ?? "—"} icon={MapPin} />
                       <Field
                         label="Wi-Fi devices"
-                        value={reg.wifi ?? "—"}
+                        value={
+                          reg.poweredDevices != null
+                            ? String(reg.poweredDevices)
+                            : (reg.wifi ?? "—")
+                        }
                         icon={Wifi}
                       />
                       <Field
                         label="Powered booth"
                         value={
-                          reg.wifi
-                            ? "Yes"
-                            : "—"
+                          reg.powerRequired ?? (reg.wifi ? "Required" : "—")
                         }
                         icon={Zap}
                       />
@@ -303,7 +312,7 @@ export function CompanyDetailModal({
                         label="Virtual Fair"
                         value={reg.virtualFair ? "Yes" : "No"}
                       />
-                      <Field label="Sister Co." value={reg.sisterCompanyPlacement ?? "—"} />
+                      <Field label="Company queue" value={reg.companyQueue ?? "—"} />
                     </div>
                   </div>
 
@@ -358,6 +367,14 @@ export function CompanyDetailModal({
                         value={reg.status ?? "—"}
                       />
                       <Field
+                        label="Balance due"
+                        value={reg.balanceDue != null ? formatCurrency(reg.balanceDue) : "—"}
+                      />
+                      <Field
+                        label="Last paid"
+                        value={reg.lastPaid ?? "—"}
+                      />
+                      <Field
                         label="Sponsor (manual)"
                         value={reg.sponsorManual === true ? "Yes" : reg.sponsorManual === false ? "No" : "—"}
                       />
@@ -375,11 +392,12 @@ export function CompanyDetailModal({
               )}
               {/* Past registration history */}
               <div className="rounded-lg border border-border bg-card p-4">
-                <h4 className="mb-3 text-sm font-semibold">Registration history</h4>
+                <h4 className="mb-3 text-sm font-semibold">Historical registration history</h4>
                 <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
                   {semesterOrder
                     .slice()
                     .reverse()
+                    .filter((s) => s !== ACTIVE_FAIR.code)
                     .map((s) => {
                       const r = company.registrationHistory[s]
                       if (!r) return null
@@ -520,18 +538,23 @@ export function CompanyDetailModal({
                       Status
                     </Label>
                     <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      From Excel
+                      Active seed
                     </span>
                   </div>
                   <div className="mt-2">
-                    <Badge variant="outline" className={STATUS_BADGE_COLORS[status]}>
-                      {status}
-                    </Badge>
+                    {reg ? (
+                      <Badge variant="outline" className={STATUS_BADGE_COLORS[status]}>
+                        {status}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-muted/50 text-muted-foreground border-border">
+                        No active registration
+                      </Badge>
+                    )}
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Status is sourced from the registration / selection workbooks. Update the
-                    Excel file and re-run the data generator to change it for Spring 2026 and
-                    earlier records.
+                    Active {ACTIVE_FAIR.label} status comes from the active registration seed.
+                    Spring 2026 and earlier statuses stay in the historical Excel background.
                   </p>
                 </div>
                 <div className="rounded-lg border border-border bg-card p-4">

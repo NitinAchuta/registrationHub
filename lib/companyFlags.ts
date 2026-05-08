@@ -67,7 +67,7 @@ export function getCompanyFlags(input: DerivedFlagsInput): CompanyFlag[] {
   const missing = getMissingInfoLabels(company)
   const deadlineDays = getDaysUntilDeadline(company)
 
-  if (deadlineDays != null && deadlineDays <= 7 && status && !FINAL_STATUSES.has(status)) {
+  if (reg && deadlineDays != null && deadlineDays <= 7 && status && !FINAL_STATUSES.has(status)) {
     flags.push({
       type: deadlineDays < 0 ? "danger" : "warning",
       label: deadlineDays < 0 ? "Decision deadline passed" : `Deadline in ${deadlineDays} day${deadlineDays === 1 ? "" : "s"}`,
@@ -75,7 +75,7 @@ export function getCompanyFlags(input: DerivedFlagsInput): CompanyFlag[] {
       priority: 90,
     })
   }
-  if (assignedTo === "Unassigned" && status && !FINAL_STATUSES.has(status)) {
+  if (reg && assignedTo === "Unassigned" && status && !FINAL_STATUSES.has(status)) {
     flags.push({
       type: "warning",
       label: "Needs coordinator assignment",
@@ -83,7 +83,7 @@ export function getCompanyFlags(input: DerivedFlagsInput): CompanyFlag[] {
       priority: 70,
     })
   }
-  if (missing.length > 0) {
+  if (reg && missing.length > 0) {
     flags.push({
       type: missing.length > 3 ? "danger" : "warning",
       label: `${missing.length} missing field${missing.length === 1 ? "" : "s"}`,

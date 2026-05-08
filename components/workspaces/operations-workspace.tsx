@@ -34,7 +34,6 @@ import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
-  cancellationRecords,
   chatMessages,
   companyScores,
   getNormalizedCompanies,
@@ -84,12 +83,20 @@ function getScoreBadge(score: number) {
   return <Badge variant="destructive">Needs Improvement</Badge>
 }
 
-export function OperationsWorkspace() {
+type OperationsWorkspaceProps = {
+  activeFairLabel?: string
+  activeCompanyCount?: number
+}
+
+export function OperationsWorkspace({
+  activeFairLabel = "Fall 2026",
+  activeCompanyCount = 0,
+}: OperationsWorkspaceProps) {
   const [cancellationDialogOpen, setCancellationDialogOpen] = useState(false)
   const [scoringDialogOpen, setScoringDialogOpen] = useState(false)
   const [selectedChatCompany, setSelectedChatCompany] = useState<string>("")
   const [newMessage, setNewMessage] = useState("")
-  const [localCancellations, setLocalCancellations] = useState(cancellationRecords)
+  const [localCancellations, setLocalCancellations] = useState<CancellationRecord[]>([])
   const [localChatMessages, setLocalChatMessages] = useState(chatMessages)
   const [localScores, setLocalScores] = useState(companyScores)
   const chatEndRef = useRef<HTMLDivElement>(null)
@@ -204,7 +211,7 @@ export function OperationsWorkspace() {
         <div>
           <h2 className="text-2xl font-semibold text-foreground">Operations & Support</h2>
           <p className="text-sm text-muted-foreground">
-            Cancellation management, internal chat, and company scoring
+            {activeFairLabel} active workflow. Historical company scoring remains labeled separately.
           </p>
         </div>
         <div className="flex gap-2">
@@ -228,7 +235,7 @@ export function OperationsWorkspace() {
                 <XCircle className="h-5 w-5 text-destructive" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Cancellations</p>
+                <p className="text-sm text-muted-foreground">{activeFairLabel} Cancellations</p>
                 <p className="text-2xl font-bold text-foreground">{localCancellations.length}</p>
               </div>
             </div>
@@ -258,7 +265,7 @@ export function OperationsWorkspace() {
                 <Star className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Companies Scored</p>
+                <p className="text-sm text-muted-foreground">Historical Companies Scored</p>
                 <p className="text-2xl font-bold text-foreground">{localScores.length}</p>
               </div>
             </div>
@@ -300,7 +307,7 @@ export function OperationsWorkspace() {
                 <CardHeader>
                   <CardTitle>Cancellation Log</CardTitle>
                   <CardDescription>
-                    Track company cancellations and booth availability
+                    Track {activeFairLabel} company cancellations and booth availability only.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -352,7 +359,7 @@ export function OperationsWorkspace() {
                       <CheckCircle2 className="h-12 w-12 text-green-500 mb-4" />
                       <p className="text-lg font-medium text-foreground">No Cancellations</p>
                       <p className="text-sm text-muted-foreground">
-                        All companies are confirmed for the career fair
+                        No {activeFairLabel} cancellations. Active registrations: {activeCompanyCount}.
                       </p>
                     </div>
                   )}
@@ -364,7 +371,7 @@ export function OperationsWorkspace() {
             <TabsContent value="scores">
               <Card>
                 <CardHeader>
-                  <CardTitle>Company Evaluation Scores</CardTitle>
+                  <CardTitle>Historical Company Evaluation Scores</CardTitle>
                   <CardDescription>
                     0-100 rubric scores based on engagement, professionalism, recruitment quality, and student feedback
                   </CardDescription>

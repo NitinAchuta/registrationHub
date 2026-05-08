@@ -10,6 +10,7 @@ export type SemesterCode =
   | "S25"
   | "F25"
   | "S26"
+  | "F26"
 
 export type ParsedPackage = {
   raw: string
@@ -20,6 +21,7 @@ export type ParsedPackage = {
 
 export type RegistrationRow = {
   semester: string
+  term?: string
   rawOrganization: string
   industry?: string
   topMajor?: string
@@ -31,6 +33,12 @@ export type RegistrationRow = {
   packageRaw: string
   virtualFair?: boolean
   wifi?: string | null
+  wifiRequested?: string | null
+  powerRequired?: string | null
+  poweredDevices?: number | null
+  companyQueue?: string | null
+  balanceDue?: number | null
+  lastPaid?: string | null
   boothLocation?: string | null
   attendeeType?: string | null
   daysAttending?: string | null
