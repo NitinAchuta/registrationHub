@@ -4,12 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/generate-company-data.mjs && next build",
     "start": "next start",
     "lint": "eslint .",
     "gen:data": "node scripts/generate-company-data.mjs",
-    "predev": "node scripts/generate-company-data.mjs",
-    "prebuild": "node scripts/generate-company-data.mjs"
+    "predev": "node scripts/generate-company-data.mjs"
+  },
+  "engines": {
+    "node": ">=20.9.0"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.2.3",

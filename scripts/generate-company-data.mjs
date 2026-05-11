@@ -1,7 +1,7 @@
 // Build-time generator: reads the three Excel workbooks under data/ and emits
 // lib/generated/company-data.json — a normalized, deduplicated dataset that the
-// app consumes at runtime. Run via `npm run gen:data` (also runs in `predev` /
-// `prebuild`).
+// app consumes at runtime. Run via `npm run gen:data` (also runs in `predev` and
+// at the start of `npm run build`).
 //
 // Inputs:
 //   data/(August 21st) F25 Company Selection Output.xlsx
