@@ -35,7 +35,7 @@ export function AttendanceChart({
   if (!anyData) {
     return (
       <div className="flex h-40 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground">
-        No attendance or hiring data available
+        No historical data available from connected sheets.
       </div>
     )
   }

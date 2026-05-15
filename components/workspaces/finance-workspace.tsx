@@ -61,17 +61,8 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-// Statuses that require outreach if older than 14 days without assignment
-const outreachStatuses: RegistrationStatus[] = [
-  "BTT Pending",
-  "BTT Confirmed",
-  "BTT Rejected",
-  "1 to 2 Day Pending",
-  "1 to 2 Day Accepted",
-  "1 to 2 Day Rejected",
-  "Pending",
-  "Waitlisted",
-]
+// Primary registration statuses that still need coordinator follow-up (BTT / 1-to-2-day are tracked separately in the hub)
+const outreachStatuses: RegistrationStatus[] = ["Pending"]
 
 function getRiskBadge(risk: CompanyFinancials["debtRiskFlag"]) {
   switch (risk) {

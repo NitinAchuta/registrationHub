@@ -56,7 +56,13 @@ import {
   CheckCircle2,
   TrendingUp,
   Award,
+  Mail,
+  Loader2,
 } from "lucide-react"
+import type { CompanyRecord, SemesterCode } from "@/lib/types"
+import { useLocalStorageState } from "@/hooks/use-local-storage"
+import { LOCAL_STORAGE_KEYS } from "@/lib/packagePricing"
+import { buildActiveF26View, getF26Meta } from "@/lib/f26Registration"
 
 function getUrgencyBadge(urgency: CancellationRecord["urgencyLevel"]) {
   switch (urgency) {
@@ -86,12 +92,20 @@ function getScoreBadge(score: number) {
 type OperationsWorkspaceProps = {
   activeFairLabel?: string
   activeCompanyCount?: number
+  registrationCompanies?: CompanyRecord[]
+  currentSemester?: SemesterCode
+  assignments?: Record<string, string>
 }
 
 export function OperationsWorkspace({
   activeFairLabel = "Fall 2026",
   activeCompanyCount = 0,
+  registrationCompanies = [],
+  currentSemester = "F26",
+  assignments: assignmentsProp,
 }: OperationsWorkspaceProps) {
+  const [assignmentsLocal] = useLocalStorageState<Record<string, string>>(LOCAL_STORAGE_KEYS.assignments, {})
+  const assignments = assignmentsProp ?? assignmentsLocal
   const [cancellationDialogOpen, setCancellationDialogOpen] = useState(false)
   const [scoringDialogOpen, setScoringDialogOpen] = useState(false)
   const [selectedChatCompany, setSelectedChatCompany] = useState<string>("")
@@ -116,6 +130,66 @@ export function OperationsWorkspace({
   })
 
   const companies = useMemo(() => getNormalizedCompanies(), [])
+
+  const opsStats = useMemo(() => {
+    let assigned = 0
+    let symplicityDone = 0
+    let deadlineAlerts = 0
+    for (const c of registrationCompanies) {
+      const reg = c.currentRegistration
+      if (!reg) continue
+      const key = `${currentSemester}:${c.id}`
+      const a = assignments[key] ?? "Unassigned"
+      if (a !== "Unassigned") assigned++
+      if (getF26Meta(reg).symplicityUpdated) symplicityDone++
+      const v = buildActiveF26View(c, currentSemester, key, assignments)
+      if (v && v.status === "Pending" && (v.deadlineLabel === "Due soon" || v.deadlineLabel === "Overdue")) {
+        deadlineAlerts++
+      }
+    }
+    return { assigned, symplicityDone, deadlineAlerts }
+  }, [registrationCompanies, assignments, currentSemester])
+
+  const deadlineRows = useMemo(() => {
+    const out: Array<{
+      id: string
+      companyName: string
+      dateRegistered: string
+      decisionDeadline: string
+      daysLeft: number | null
+      assignedTo: string
+      status: string
+    }> = []
+    for (const c of registrationCompanies) {
+      const key = `${currentSemester}:${c.id}`
+      const v = buildActiveF26View(c, currentSemester, key, assignments)
+      if (!v || v.status !== "Pending") continue
+      if (v.deadlineLabel !== "Due soon" && v.deadlineLabel !== "Overdue") continue
+      out.push({
+        id: c.id,
+        companyName: c.canonicalName,
+        dateRegistered: v.dateRegisteredIso ?? "—",
+        decisionDeadline: v.decisionDeadlineIso ?? "—",
+        daysLeft: v.daysLeft,
+        assignedTo: v.assignedTo,
+        status: v.status,
+      })
+    }
+    return out
+  }, [registrationCompanies, assignments, currentSemester])
+
+  const deadlineMailto = useMemo(() => {
+    if (deadlineRows.length === 0) return ""
+    const bodyLines = deadlineRows.map(
+      (r) =>
+        `Company: ${r.companyName}\nDate Registered: ${r.dateRegistered}\nDecision Deadline: ${r.decisionDeadline}\nDays Left: ${r.daysLeft ?? "—"}\nAssigned To: ${r.assignedTo}\nCurrent Status: ${r.status}`,
+    )
+    const subject = encodeURIComponent("SEC Career Fair Registration Deadline Reminder")
+    const body = encodeURIComponent(
+      `The following company is approaching or past the 6-week decision deadline:\n\n${bodyLines.join("\n\n---\n\n")}\n\nPlease review and update the company decision in the SEC Career Fair Hub.`,
+    )
+    return `mailto:?subject=${subject}&body=${body}`
+  }, [deadlineRows])
 
   const currentChatMessages = useMemo(() => {
     if (!selectedChatCompany) return []
@@ -204,6 +278,43 @@ export function OperationsWorkspace({
     return localScores.find(s => s.companyName === companyName)
   }
 
+  const [enrichmentRunning, setEnrichmentRunning] = useState(false)
+  const [enrichmentSummary, setEnrichmentSummary] = useState<string | null>(null)
+  const [enrichmentError, setEnrichmentError] = useState<string | null>(null)
+
+  async function runEnrichment(force: boolean) {
+    setEnrichmentRunning(true)
+    setEnrichmentError(null)
+    setEnrichmentSummary(null)
+    try {
+      const res = await fetch("/api/enrichment/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ force }),
+      })
+      const json = (await res.json().catch(() => ({}))) as {
+        success?: boolean
+        error?: string
+        enriched?: number
+        skippedFresh?: number
+        lowConfidence?: number
+        errors?: unknown[]
+      }
+      if (!res.ok) {
+        throw new Error(json.error || "Enrichment request failed.")
+      }
+      const errs = Array.isArray(json.errors) ? json.errors.length : 0
+      setEnrichmentSummary(
+        `Enriched ${json.enriched ?? 0} companies · Skipped ${json.skippedFresh ?? 0} recently updated · Low-confidence ${json.lowConfidence ?? 0} · Errors ${errs}`,
+      )
+    } catch (e) {
+      setEnrichmentError(e instanceof Error ? e.message : "Enrichment failed.")
+    } finally {
+      setEnrichmentRunning(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -215,9 +326,20 @@ export function OperationsWorkspace({
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={deadlineRows.length === 0}
+            onClick={() => {
+              if (deadlineMailto) window.location.href = deadlineMailto
+            }}
+          >
+            <Mail className="mr-2 h-4 w-4" />
+            Draft reminder email
+          </Button>
           <Button variant="outline" onClick={() => setScoringDialogOpen(true)}>
             <Star className="mr-2 h-4 w-4" />
-            Score Company
+            Legacy score entry
           </Button>
           <Button variant="destructive" onClick={() => setCancellationDialogOpen(true)}>
             <XCircle className="mr-2 h-4 w-4" />
@@ -262,11 +384,11 @@ export function OperationsWorkspace({
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                <Star className="h-5 w-5 text-primary" />
+                <User className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Historical Companies Scored</p>
-                <p className="text-2xl font-bold text-foreground">{localScores.length}</p>
+                <p className="text-sm text-muted-foreground">Companies assigned</p>
+                <p className="text-2xl font-bold text-foreground">{opsStats.assigned}</p>
               </div>
             </div>
           </CardContent>
@@ -275,21 +397,102 @@ export function OperationsWorkspace({
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100">
-                <TrendingUp className="h-5 w-5 text-green-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100">
+                <CheckCircle2 className="h-5 w-5 text-emerald-700" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Avg. Score</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {localScores.length > 0
-                    ? Math.round(localScores.reduce((s, c) => s + c.totalScore, 0) / localScores.length)
-                    : 0}
-                </p>
+                <p className="text-sm text-muted-foreground">Symplicity updates complete</p>
+                <p className="text-2xl font-bold text-foreground">{opsStats.symplicityDone}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100">
+                <Clock className="h-5 w-5 text-amber-700" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Deadline reminders</p>
+                <p className="text-2xl font-bold text-foreground">{opsStats.deadlineAlerts}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {currentSemester === "F26" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Company enrichment (bulk)</CardTitle>
+            <CardDescription>
+              Updates every Export row and uses many FMP requests. Prefer{" "}
+              <span className="font-medium text-foreground">Refresh enrichment</span> on each company card instead — it
+              only processes that row and skips FMP when the sheet already has data from the last 30 days. Opening the
+              dashboard never calls FMP; only these actions do.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <Button
+              type="button"
+              disabled={enrichmentRunning}
+              onClick={() => void runEnrichment(false)}
+              variant="default"
+            >
+              {enrichmentRunning ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Running…
+                </>
+              ) : (
+                "Run Company Enrichment"
+              )}
+            </Button>
+            <Button
+              type="button"
+              disabled={enrichmentRunning}
+              onClick={() => void runEnrichment(true)}
+              variant="outline"
+            >
+              Force Refresh Enrichment
+            </Button>
+          </CardContent>
+          {(enrichmentSummary || enrichmentError) && (
+            <CardContent className="pt-0 text-sm">
+              {enrichmentError ? (
+                <p className="text-destructive">{enrichmentError}</p>
+              ) : (
+                <p className="text-muted-foreground">{enrichmentSummary}</p>
+              )}
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Deadline reminders</CardTitle>
+          <CardDescription>
+            Pending registrations due within 7 days or overdue (6-week RG decision window). No automated email is sent from this app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {deadlineRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No pending deadline alerts.</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {deadlineRows.map((r) => (
+                <li key={r.id} className="rounded-md border border-border bg-muted/30 px-3 py-2">
+                  <span className="font-medium">{r.companyName}</span> — deadline {r.decisionDeadline} —{" "}
+                  {r.daysLeft != null && r.daysLeft <= 0 ? "Overdue" : `${r.daysLeft}d left`} — {r.assignedTo}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Main Content */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

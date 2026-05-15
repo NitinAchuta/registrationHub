@@ -178,9 +178,9 @@ export function getCompanyScore(
     recommendation = "Recommended for Denial"
     reasons.push("Low overall score with limited indicators of strong fit.")
   } else if (totalScore < 55) {
-    recommendation = "Recommended for Waitlist"
-    reasons.push("Mid-range score — keep on waitlist pending booth availability.")
-  } else if (status === "BTT Pending" || status === "Pending") {
+    recommendation = "Recommended for Review"
+    reasons.push("Mid-range score — coordinator review recommended.")
+  } else if (status === "Pending") {
     recommendation = "Recommended for BTT"
     reasons.push("Score acceptable; consider BTT path if booth space tight.")
   } else {

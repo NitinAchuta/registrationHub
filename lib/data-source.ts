@@ -8,9 +8,7 @@ import type {
   RegistrationStatus,
   SemesterCode,
 } from "./types"
-import { activeRegistrationSeed, toRegistrationRow } from "./activeRegistrations"
 import { ACTIVE_FAIR } from "./fairConfig"
-import { normalizeCompanyName, getCompanySlug } from "./companyNormalizer"
 import { mapRawStatus } from "./statusMapping"
 
 const dataset = companyData as unknown as CompanyDataset
@@ -49,78 +47,12 @@ export function getRegistrationCompanies(
 }
 
 export function getCompaniesWithActiveRegistrationOverlay(): CompanyRecord[] {
-  const companies: CompanyRecord[] = dataset.companies.map((company) => ({
+  return dataset.companies.map((company) => ({
     ...company,
-    currentRegistration: null,
+    currentRegistration: company.currentRegistration ?? null,
     registrationHistory: { ...company.registrationHistory },
     sources: [...company.sources],
   }))
-
-  for (const seed of activeRegistrationSeed) {
-    const seedName = normalizeCompanyName(seed.companyName)
-    const registration = toRegistrationRow(seed)
-    let company = companies.find(
-      (candidate) =>
-        normalizeCompanyName(candidate.canonicalName) === seedName ||
-        candidate.variants.some((variant) => normalizeCompanyName(variant) === seedName),
-    )
-
-    if (!company) {
-      company = createCompanyFromSeed(seed.companyName)
-      companies.push(company)
-    }
-
-    company.currentRegistration = registration
-    company.registrationHistory[ACTIVE_FAIR.code] = registration
-    company.sources = Array.from(
-      new Set([...company.sources, `ActiveRegistrationSeed:${ACTIVE_FAIR.code}`]),
-    )
-    company.industry = company.industry ?? seed.industry
-    company.industryTags = Array.from(new Set([...company.industryTags, seed.industry]))
-    if (!company.variants.includes(seed.companyName)) {
-      company.variants = [...company.variants, seed.companyName]
-    }
-  }
-
-  return companies
-}
-
-function createCompanyFromSeed(companyName: string): CompanyRecord {
-  return {
-    id: getCompanySlug(companyName),
-    canonicalName: companyName,
-    variants: [companyName],
-    sources: [`ActiveRegistrationSeed:${ACTIVE_FAIR.code}`],
-    industry: null,
-    industryTags: [],
-    companyType: null,
-    revenueMillionsUSD: null,
-    marketCapBillionsUSD: null,
-    employees: null,
-    willingToSponsor: null,
-    bachelorHires: null,
-    masterHires: null,
-    doctorateHires: null,
-    totalHires: 0,
-    hiringHistory: {},
-    attendanceHistory: {},
-    semestersAttended: [],
-    packageHistory: {},
-    currentRegistration: null,
-    registrationHistory: {},
-    relationship: {
-      attendedPastFairs: false,
-      outsideEngagement: false,
-      fycfParticipant: false,
-      alumniPresence: false,
-      careerCenterPartner: false,
-      coeDonor: false,
-    },
-    f25Selection: null,
-    f25SortedHistory: null,
-    f25Waitlist: null,
-    majorBuckets: [],
-  }
 }
 
 /**

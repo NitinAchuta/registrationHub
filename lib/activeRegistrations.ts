@@ -1,13 +1,16 @@
 import { ACTIVE_FAIR } from "./fairConfig"
 import type { RegistrationRow } from "./types"
+import { defaultF26Meta } from "./f26Registration"
 
 export type ActiveRegistrationSeed = {
   term: string
   semester: string
   companyName: string
   industry: string
+  /** Major code */
   topMajor: string
-  requestedPackage: string
+  packageTier: string
+  duration: string
   status: string
   assignedTo: string
   daysAttending: string
@@ -25,47 +28,14 @@ export type ActiveRegistrationSeed = {
   degreeLevels: string[]
   positionTypes: string[]
   workAuthorization: string[]
+  /** ISO date YYYY-MM-DD */
+  dateRegistered: string
 }
 
-export const activeRegistrationSeed: ActiveRegistrationSeed[] = [
-  {
-    term: ACTIVE_FAIR.label,
-    semester: ACTIVE_FAIR.code,
-    companyName: "Chevron",
-    industry: "Energy",
-    topMajor: "Petroleum Engineering",
-    requestedPackage: "Platinum",
-    status: "Pending",
-    assignedTo: "Unassigned",
-    daysAttending: "Both Days",
-    powerRequired: "Required",
-    repCount: 3,
-    poweredDevices: 22,
-    balanceDue: 5000,
-    lastPaid: "Fall 2025",
-    virtualFair: "Yes",
-    wifiRequested: "Requested",
-    companyQueue: "Yes",
-    boothLocation: "Not assigned yet",
-    attendeeType: "In-Person",
-    majorsRecruited: [
-      "Petroleum Engineering",
-      "Chemical Engineering",
-      "Mechanical Engineering",
-    ],
-    degreeLevels: ["Junior", "Senior", "Masters"],
-    positionTypes: ["Full-Time", "Internship"],
-    workAuthorization: [
-      "US Citizen",
-      "Permanent Resident",
-      "H-1B",
-      "OPT/CPT",
-      "Any",
-    ],
-  },
-]
+export const activeRegistrationSeed: ActiveRegistrationSeed[] = []
 
 export function toRegistrationRow(seed: ActiveRegistrationSeed): RegistrationRow {
+  const pkgRaw = `${seed.packageTier} ${seed.duration}`
   return {
     semester: seed.semester,
     term: seed.term,
@@ -77,12 +47,12 @@ export function toRegistrationRow(seed: ActiveRegistrationSeed): RegistrationRow
     positionTypes: seed.positionTypes,
     workAuthorization: seed.workAuthorization,
     package: {
-      raw: seed.requestedPackage,
-      tier: seed.requestedPackage,
-      days: seed.daysAttending === "Both Days" ? "Two-Day" : seed.daysAttending,
+      raw: pkgRaw,
+      tier: seed.packageTier,
+      days: seed.duration,
       priceUSD: null,
     },
-    packageRaw: seed.requestedPackage,
+    packageRaw: pkgRaw,
     virtualFair: seed.virtualFair === "Yes",
     wifi: `${seed.wifiRequested}; ${seed.poweredDevices} powered devices`,
     wifiRequested: seed.wifiRequested,
@@ -95,9 +65,13 @@ export function toRegistrationRow(seed: ActiveRegistrationSeed): RegistrationRow
     attendeeType: seed.attendeeType,
     daysAttending: seed.daysAttending,
     status: seed.status,
-    registeredOnRaw: undefined,
+    registeredOnRaw: seed.dateRegistered,
     repCount: seed.repCount,
     repsDay1: null,
     repsDay2: null,
+    f26Meta: {
+      ...defaultF26Meta(),
+      symplicityUpdated: false,
+    },
   }
 }

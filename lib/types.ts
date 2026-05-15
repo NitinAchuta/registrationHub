@@ -19,6 +19,18 @@ export type ParsedPackage = {
   priceUSD: number | null
 } | null
 
+export type BttWorkflowStatus = "None" | "Pending" | "Confirmed" | "Denied"
+
+export type OneToTwoDayWorkflowStatus = "None" | "Pending" | "Confirmed" | "Denied"
+
+export type F26CoordinatorMeta = {
+  bttStatus: BttWorkflowStatus
+  oneToTwoDayStatus: OneToTwoDayWorkflowStatus
+  symplicityUpdated: boolean
+  symplicityUpdatedAt?: string
+  symplicityUpdatedBy?: string
+}
+
 export type RegistrationRow = {
   semester: string
   term?: string
@@ -51,6 +63,24 @@ export type RegistrationRow = {
   sisterCompanyPlacement?: string | null
   welcomeSocialRaw?: string | null
   companyChatRaw?: string | null
+  /** Fall 2026 coordinator workflow fields (client-persisted). */
+  f26Meta?: F26CoordinatorMeta
+  /** Google Export tab — contact / row metadata */
+  registeringContact?: string | null
+  contactEmail?: string | null
+  contactPhoneRaw?: string | null
+  contactPhoneDisplay?: string | null
+  phoneNormalizedIssue?: string | null
+  exportRowNumber?: number | null
+  sheetNotes?: string[]
+  sheetWarnings?: string[]
+  exportRawColumns?: Record<string, string>
+  day1AdditionalReps?: string | null
+  day2AdditionalReps?: string | null
+  workAuthorizationRaw?: string | null
+  positionTypesRaw?: string | null
+  statusRaw?: string | null
+  packageDaysMismatchWarning?: boolean
 }
 
 export type AttendanceRow = {
@@ -126,6 +156,11 @@ export type CompanyRecord = {
     notes: string | null
   } | null
   majorBuckets: string[]
+  /** MVP hiring flags; not inferred from totalHires unless data is explicit. */
+  hiredFall2025?: "Yes" | "No" | "Unknown"
+  hiredSpring2025?: "Yes" | "No" | "Unknown"
+  /** Credits loaded from Sheets (optional cache). */
+  credits?: CompanyCredit[]
 }
 
 export type MajorAnalytics = {
@@ -155,62 +190,49 @@ export type CompanyDataset = {
 
 // Workflow / coordinator-side types
 
-export type RegistrationStatus =
-  | "Confirmed"
-  | "Denied"
-  | "Pending"
-  | "Waitlisted"
-  | "Cancelled"
-  | "BTT Pending"
-  | "BTT Confirmed"
-  | "BTT Rejected"
-  | "1 to 2 Day Pending"
-  | "1 to 2 Day Accepted"
-  | "1 to 2 Day Rejected"
+/** Primary SEC registration decision only (Fall 2026 hub). BTT / 1-to-2-day are separate fields. */
+export type RegistrationStatus = "Confirmed" | "Denied" | "Pending" | "Canceled"
 
 export const ALL_REGISTRATION_STATUSES: RegistrationStatus[] = [
   "Confirmed",
   "Denied",
   "Pending",
-  "Waitlisted",
-  "Cancelled",
-  "BTT Pending",
-  "BTT Confirmed",
-  "BTT Rejected",
-  "1 to 2 Day Pending",
-  "1 to 2 Day Accepted",
-  "1 to 2 Day Rejected",
+  "Canceled",
 ]
 
 export const FINAL_STATUSES: ReadonlySet<RegistrationStatus> = new Set([
   "Confirmed",
   "Denied",
-  "BTT Confirmed",
-  "BTT Rejected",
-  "1 to 2 Day Accepted",
-  "1 to 2 Day Rejected",
-  "Cancelled",
+  "Canceled",
 ])
 
 export type AssignedToOption =
-  | "Aryan"
-  | "Teresa"
+  | "Unassigned"
   | "Kyle"
   | "Nathan"
   | "Raul"
   | "Pranav"
+  | "Teresa"
   | "Chairs"
-  | "Unassigned"
+
 export const ASSIGNMENT_OPTIONS: AssignedToOption[] = [
   "Unassigned",
-  "Aryan",
-  "Teresa",
   "Kyle",
   "Nathan",
   "Raul",
   "Pranav",
+  "Teresa",
   "Chairs",
 ]
+
+export function isAssignedToOption(value: string): value is AssignedToOption {
+  return (ASSIGNMENT_OPTIONS as readonly string[]).includes(value)
+}
+
+export function parseAssignedToOption(raw: string | null | undefined): AssignedToOption {
+  if (raw && isAssignedToOption(raw)) return raw
+  return "Unassigned"
+}
 
 export type CompanyFlag = {
   type: "success" | "warning" | "danger" | "info"
@@ -269,4 +291,65 @@ export type CreditsRecord = {
   added: number
   distributed: number
   notes: string
+}
+
+export type CompanyProfileNoteTag =
+  | "General"
+  | "Decision"
+  | "Finance"
+  | "Logistics"
+  | "Symplicity"
+  | "BTT"
+  | "1-to-2-Day"
+
+export type CompanyProfileNote = {
+  id: string
+  companyId: string
+  text: string
+  author: string
+  createdAt: string
+  tag?: CompanyProfileNoteTag
+}
+
+export type EnrichmentConfidence = "high" | "medium" | "low"
+
+/** Parsed row from Google Sheets tab “Company Enrichment”. */
+export type CompanyEnrichment = {
+  companyName: string
+  sourceRowNumber: number | null
+  domain: string | null
+  ticker: string | null
+  cik: string | null
+  revenue: number | null
+  revenueSource: string | null
+  revenueFiscalYear: string | null
+  marketCap: number | null
+  marketCapSource: string | null
+  employees: number | null
+  employeesSource: string | null
+  confidence: EnrichmentConfidence
+  lastUpdated: string
+  error: string | null
+}
+
+/** Dollar credits stored in Google Sheets `Credits` tab (see API routes). */
+export type CompanyCredit = {
+  id: string
+  companyName: string
+  rowNumber?: number
+  amount: number
+  reason: string
+  createdAt: string
+  createdBy?: string
+  source: "google_sheet" | "excel" | "local"
+}
+
+/** @deprecated Use CompanyCredit + Google Sheets credits API */
+export type CompanyCreditLine = {
+  id: string
+  companyId: string
+  amount: number
+  reason: string
+  createdAt: string
+  createdBy?: string
 }

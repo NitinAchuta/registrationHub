@@ -1,4 +1,22 @@
 // Small formatting helpers shared across views.
+/** Compact USD for large figures (e.g. $12.4B, $850M). For missing values use callers’ copy. */
+export function formatCompactUsd(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "Not available."
+  const v = Math.abs(value)
+  const sign = value < 0 ? "-" : ""
+  if (v >= 1e12) return `${sign}$${(value / 1e12).toFixed(1)}T`
+  if (v >= 1e9) return `${sign}$${(value / 1e9).toFixed(1)}B`
+  if (v >= 1e6) return `${sign}$${(value / 1e6).toFixed(1)}M`
+  if (v >= 1e3) return `${sign}$${(value / 1e3).toFixed(1)}K`
+  return `${sign}$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+}
+
+/** Headcount display with commas; missing → caller-facing “Not available.” */
+export function formatEmployeesCount(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "Not available."
+  return Math.round(value).toLocaleString("en-US")
+}
+
 export function formatCurrency(amount: number | null | undefined): string {
   if (amount == null || !Number.isFinite(amount)) return "—"
   return new Intl.NumberFormat("en-US", {

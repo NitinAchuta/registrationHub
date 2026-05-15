@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -21,54 +21,98 @@ import {
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Building2, Briefcase, GraduationCap, CheckCircle2 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { MAJORS, type MajorCode } from "@/lib/majors"
+import type {
+  AssignedToCoordinator,
+  DaysAttending,
+  FairDuration,
+  F26ManualRegistration,
+  PackageTier,
+} from "@/lib/f26Registration"
+import { decisionDeadlineFromRegistered } from "@/lib/f26Registration"
+import { calculateEstimatedPackageValue } from "@/lib/packagePricing"
+import { getCompanySlug } from "@/lib/companyNormalizer"
+import { ASSIGNMENT_OPTIONS } from "@/lib/types"
+
+const PACKAGE_TIERS: PackageTier[] = ["Basic", "Silver", "Gold", "Diamond", "Maroon"]
+const DURATIONS: FairDuration[] = ["One-Day", "Two-Day"]
+const DAYS_OPTIONS: { value: DaysAttending; label: string }[] = [
+  { value: "Wednesday", label: "Wednesday" },
+  { value: "Thursday", label: "Thursday" },
+  { value: "Both", label: "Both" },
+]
+
+const WORK_AUTH_OPTIONS = [
+  "US Citizen",
+  "Permanent Resident",
+  "H-1B",
+  "OPT/CPT",
+  "Any",
+  "Does not sponsor",
+  "Unknown",
+] as const
+
+const DEGREE_OPTIONS = [
+  "Freshman",
+  "Sophomore",
+  "Junior",
+  "Senior",
+  "Masters",
+  "PhD",
+  "Alumni",
+] as const
+
+const POSITION_OPTIONS = [
+  "Internship",
+  "Co-op",
+  "Full-Time",
+  "Part-Time",
+  "Research",
+  "Leadership Program",
+] as const
 
 type FormData = {
-  // Company
   organization: string
   industry: string
-  // Logistics
-  package: string
+  packageTier: PackageTier | ""
+  duration: FairDuration | ""
+  daysAttending: DaysAttending
   virtualFair: boolean
-  wifi: boolean
-  boothLocation: string
-  attendeeType: string
-  day1: boolean
-  day2: boolean
-  // Recruitment
-  topMajor: string
-  majorsRecruited: string
-  degreeLevels: string
-  positionTypes: string
-  workAuth: string
-  // Contact
-  repName: string
-  repEmail: string
-  repPhone: string
-  additionalRepsDay1: string
-  additionalRepsDay2: string
+  poweredBooth: boolean
+  poweredDevices: string
+  representativeCount: string
+  dateRegistered: string
+  primaryMajor: MajorCode | ""
+  majorsRecruited: MajorCode[]
+  degreeLevels: string[]
+  positionTypes: string[]
+  workAuthorization: string[]
+  assignedTo: AssignedToCoordinator
+  symplicityUpdated: boolean
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10)
 }
 
 const defaultForm: FormData = {
   organization: "",
   industry: "",
-  package: "",
+  packageTier: "",
+  duration: "",
+  daysAttending: "Both",
   virtualFair: false,
-  wifi: false,
-  boothLocation: "",
-  attendeeType: "",
-  day1: false,
-  day2: false,
-  topMajor: "",
-  majorsRecruited: "",
-  degreeLevels: "",
-  positionTypes: "",
-  workAuth: "",
-  repName: "",
-  repEmail: "",
-  repPhone: "",
-  additionalRepsDay1: "",
-  additionalRepsDay2: "",
+  poweredBooth: false,
+  poweredDevices: "",
+  representativeCount: "3",
+  dateRegistered: todayIso(),
+  primaryMajor: "",
+  majorsRecruited: [],
+  degreeLevels: [],
+  positionTypes: [],
+  workAuthorization: [],
+  assignedTo: "Unassigned",
+  symplicityUpdated: false,
 }
 
 function FormSection({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
@@ -95,7 +139,16 @@ function FormField({ label, children, required }: { label: string; children: Rea
   )
 }
 
-export function RegistrationFormDialog() {
+function toggleInList<T extends string>(list: T[], v: T, set: (next: T[]) => void) {
+  if (list.includes(v)) set(list.filter((x) => x !== v))
+  else set([...list, v])
+}
+
+type Props = {
+  onManualRegistration?: (entry: F26ManualRegistration) => void
+}
+
+export function RegistrationFormDialog({ onManualRegistration }: Props) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<FormData>(defaultForm)
   const [submitted, setSubmitted] = useState(false)
@@ -104,16 +157,63 @@ export function RegistrationFormDialog() {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
+  const decisionDeadline = useMemo(
+    () => (form.dateRegistered ? decisionDeadlineFromRegistered(form.dateRegistered) : ""),
+    [form.dateRegistered],
+  )
+
+  const estimate = useMemo(() => {
+    if (!form.packageTier || !form.duration) return null
+    const n = Number(form.representativeCount) || 0
+    return calculateEstimatedPackageValue({
+      packageTier: form.packageTier,
+      duration: form.duration,
+      representativeCount: n,
+      poweredBooth: form.poweredBooth,
+      virtualFair: form.virtualFair,
+    })
+  }, [form.packageTier, form.duration, form.representativeCount, form.poweredBooth, form.virtualFair])
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    // In a real app this would call an API
+    if (!form.organization.trim() || !form.packageTier || !form.duration || !form.primaryMajor) return
+    const id = getCompanySlug(form.organization.trim())
+    const repN = Math.max(0, Math.floor(Number(form.representativeCount) || 0))
+    const devN = form.poweredDevices.trim() ? Math.max(0, Number(form.poweredDevices)) : undefined
+    const entry: F26ManualRegistration = {
+      id: `manual-${id}-${Date.now()}`,
+      companyId: id,
+      companyName: form.organization.trim(),
+      industry: form.industry || "Other",
+      fairCode: "F26",
+      dateRegistered: form.dateRegistered,
+      decisionDeadline,
+      status: "Pending",
+      packageTier: form.packageTier,
+      duration: form.duration,
+      daysAttending: form.daysAttending,
+      virtualFair: form.virtualFair,
+      representativeCount: repN,
+      poweredBooth: form.poweredBooth,
+      poweredDevices: devN,
+      primaryMajor: form.primaryMajor,
+      majorsRecruited: form.majorsRecruited.length ? form.majorsRecruited : [form.primaryMajor],
+      degreeLevels: form.degreeLevels,
+      positionTypes: form.positionTypes,
+      workAuthorization: form.workAuthorization,
+      assignedTo: form.assignedTo,
+      symplicityUpdated: form.symplicityUpdated,
+      bttStatus: "None",
+      oneToTwoDayStatus: "None",
+    }
+    onManualRegistration?.(entry)
     setSubmitted(true)
   }
 
   function handleClose() {
     setOpen(false)
     setTimeout(() => {
-      setForm(defaultForm)
+      setForm({ ...defaultForm, dateRegistered: todayIso() })
       setSubmitted(false)
     }, 300)
   }
@@ -132,7 +232,7 @@ export function RegistrationFormDialog() {
               <CheckCircle2 className="h-14 w-14 text-emerald-500" />
               <h2 className="text-xl font-bold text-foreground">Registration Submitted</h2>
               <p className="text-sm text-muted-foreground text-center max-w-xs">
-                The new company entry has been added successfully and will appear in the registration table.
+                The entry is saved in this browser and appears in the Fall 2026 registrations list.
               </p>
               <Button onClick={handleClose}>Close</Button>
             </div>
@@ -141,12 +241,11 @@ export function RegistrationFormDialog() {
               <DialogHeader className="pb-4">
                 <DialogTitle className="text-lg font-bold">New Company Registration</DialogTitle>
                 <DialogDescription>
-                  Complete all sections to register a new company for the career fair.
+                  Fall 2026 active registration (stored locally in this browser).
                 </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-8 py-4">
-                {/* Company */}
                 <FormSection icon={Building2} title="Company Information">
                   <div className="grid grid-cols-2 gap-4">
                     <FormField label="Organization Name" required>
@@ -164,7 +263,9 @@ export function RegistrationFormDialog() {
                         </SelectTrigger>
                         <SelectContent>
                           {["Energy", "Technology", "Defense & Aerospace", "Semiconductor", "Oilfield Services", "Finance", "Consulting", "Healthcare", "Other"].map((i) => (
-                            <SelectItem key={i} value={i}>{i}</SelectItem>
+                            <SelectItem key={i} value={i}>
+                              {i}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -172,182 +273,179 @@ export function RegistrationFormDialog() {
                   </div>
                 </FormSection>
 
-                {/* Logistics */}
-                <FormSection icon={Briefcase} title="Logistics">
+                <FormSection icon={Briefcase} title="Package & logistics">
                   <div className="grid grid-cols-2 gap-4">
-                    <FormField label="Sponsorship Package" required>
-                      <Select value={form.package} onValueChange={(v) => set("package", v)}>
+                    <FormField label="Package tier" required>
+                      <Select value={form.packageTier} onValueChange={(v) => set("packageTier", v as PackageTier)}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select package" />
+                          <SelectValue placeholder="Select tier" />
                         </SelectTrigger>
                         <SelectContent>
-                          {["Platinum", "Gold", "Silver", "Bronze"].map((p) => (
-                            <SelectItem key={p} value={p}>{p}</SelectItem>
+                          {PACKAGE_TIERS.map((p) => (
+                            <SelectItem key={p} value={p}>
+                              {p}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </FormField>
-                    <FormField label="Attendee Type" required>
-                      <Select value={form.attendeeType} onValueChange={(v) => set("attendeeType", v)}>
+                    <FormField label="Duration" required>
+                      <Select value={form.duration} onValueChange={(v) => set("duration", v as FairDuration)}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
+                          <SelectValue placeholder="One or two days" />
                         </SelectTrigger>
                         <SelectContent>
-                          {["In-Person", "Virtual", "Hybrid"].map((t) => (
-                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                          {DURATIONS.map((d) => (
+                            <SelectItem key={d} value={d}>
+                              {d}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </FormField>
-                    <FormField label="Booth Location">
+                    <FormField label="Days attending">
+                      <Select value={form.daysAttending} onValueChange={(v) => set("daysAttending", v as DaysAttending)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DAYS_OPTIONS.map((d) => (
+                            <SelectItem key={d.value} value={d.value}>
+                              {d.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormField>
+                    <FormField label="Date registered" required>
+                      <Input type="date" value={form.dateRegistered} onChange={(e) => set("dateRegistered", e.target.value)} required />
+                    </FormField>
+                    <FormField label="Decision deadline (auto)">
+                      <Input readOnly value={decisionDeadline} className="bg-muted" />
+                    </FormField>
+                    <FormField label="Representative count" required>
                       <Input
-                        placeholder="e.g. A1, B3"
-                        value={form.boothLocation}
-                        onChange={(e) => set("boothLocation", e.target.value)}
+                        type="number"
+                        min={0}
+                        value={form.representativeCount}
+                        onChange={(e) => set("representativeCount", e.target.value)}
                       />
                     </FormField>
-                    <FormField label="Days Attending">
-                      <div className="flex items-center gap-4 h-9">
-                        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                          <Checkbox
-                            checked={form.day1}
-                            onCheckedChange={(v) => set("day1", !!v)}
-                          />
-                          Day 1
-                        </label>
-                        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                          <Checkbox
-                            checked={form.day2}
-                            onCheckedChange={(v) => set("day2", !!v)}
-                          />
-                          Day 2
-                        </label>
-                      </div>
+                    <FormField label="Powered devices (optional)">
+                      <Input type="number" min={0} value={form.poweredDevices} onChange={(e) => set("poweredDevices", e.target.value)} />
                     </FormField>
-                    <FormField label="Additional Options">
-                      <div className="flex items-center gap-4 h-9">
-                        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                          <Checkbox
-                            checked={form.virtualFair}
-                            onCheckedChange={(v) => set("virtualFair", !!v)}
-                          />
-                          Virtual Fair
-                        </label>
-                        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                          <Checkbox
-                            checked={form.wifi}
-                            onCheckedChange={(v) => set("wifi", !!v)}
-                          />
-                          Wi-Fi
-                        </label>
-                      </div>
+                    <FormField label="Assigned to">
+                      <Select value={form.assignedTo} onValueChange={(v) => set("assignedTo", v as AssignedToCoordinator)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ASSIGNMENT_OPTIONS.map((a) => (
+                            <SelectItem key={a} value={a}>
+                              {a}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormField>
+                  </div>
+                  <div className="flex flex-wrap gap-4 pt-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={form.virtualFair} onCheckedChange={(v) => set("virtualFair", !!v)} />
+                      Virtual Career Fair (FREE add-on)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={form.poweredBooth} onCheckedChange={(v) => set("poweredBooth", !!v)} />
+                      Powered booth (+$50)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={form.symplicityUpdated} onCheckedChange={(v) => set("symplicityUpdated", !!v)} />
+                      Info updated in Symplicity
+                    </label>
+                  </div>
+                  <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
+                    <p className="font-semibold">Package summary</p>
+                    <p className="text-muted-foreground text-xs mt-1">
+                      {form.packageTier && form.duration ? `${form.packageTier} ${form.duration}` : "Select tier and duration"}
+                      {form.virtualFair ? " · Virtual Career Fair: FREE" : ""}
+                    </p>
+                    {estimate != null && (
+                      <p className="mt-2 text-base font-bold text-foreground">Estimated total: ${estimate.toLocaleString()}</p>
+                    )}
                   </div>
                 </FormSection>
 
-                {/* Recruitment */}
                 <FormSection icon={GraduationCap} title="Recruitment">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField label="Top Major Recruited" required>
-                      <Select value={form.topMajor} onValueChange={(v) => set("topMajor", v)}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select major" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[
-                            "Petroleum Engineering",
-                            "Chemical Engineering",
-                            "Mechanical Engineering",
-                            "Electrical Engineering",
-                            "Computer Science",
-                            "Computer Engineering",
-                            "Aerospace Engineering",
-                            "Civil Engineering",
-                            "Industrial Engineering",
-                            "Information Technology",
-                            "Other",
-                          ].map((m) => (
-                            <SelectItem key={m} value={m}>{m}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormField>
-                    <FormField label="All Majors Recruited">
-                      <Input
-                        placeholder="e.g. Mech E, Chem E"
-                        value={form.majorsRecruited}
-                        onChange={(e) => set("majorsRecruited", e.target.value)}
-                      />
-                    </FormField>
-                    <FormField label="Degree Levels">
-                      <Input
-                        placeholder="e.g. Junior, Senior, Masters"
-                        value={form.degreeLevels}
-                        onChange={(e) => set("degreeLevels", e.target.value)}
-                      />
-                    </FormField>
-                    <FormField label="Position Types">
-                      <Input
-                        placeholder="e.g. Full-Time, Internship"
-                        value={form.positionTypes}
-                        onChange={(e) => set("positionTypes", e.target.value)}
-                      />
-                    </FormField>
-                    <FormField label="Work Authorization">
-                      <Input
-                        placeholder="e.g. US Citizen, OPT/CPT"
-                        value={form.workAuth}
-                        onChange={(e) => set("workAuth", e.target.value)}
-                        className="col-span-2"
-                      />
-                    </FormField>
-                  </div>
-                </FormSection>
-
-                {/* Contact */}
-                <FormSection icon={Building2} title="Contact Information">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField label="Representative Name" required>
-                      <Input
-                        placeholder="Full name"
-                        value={form.repName}
-                        onChange={(e) => set("repName", e.target.value)}
-                        required
-                      />
-                    </FormField>
-                    <FormField label="Representative Email" required>
-                      <Input
-                        type="email"
-                        placeholder="email@company.com"
-                        value={form.repEmail}
-                        onChange={(e) => set("repEmail", e.target.value)}
-                        required
-                      />
-                    </FormField>
-                    <FormField label="Personal Phone">
-                      <Input
-                        type="tel"
-                        placeholder="(xxx) xxx-xxxx"
-                        value={form.repPhone}
-                        onChange={(e) => set("repPhone", e.target.value)}
-                      />
-                    </FormField>
-                    <div />
-                    <FormField label="Additional Reps — Day 1">
-                      <Input
-                        placeholder="Names, comma-separated"
-                        value={form.additionalRepsDay1}
-                        onChange={(e) => set("additionalRepsDay1", e.target.value)}
-                      />
-                    </FormField>
-                    <FormField label="Additional Reps — Day 2">
-                      <Input
-                        placeholder="Names, comma-separated"
-                        value={form.additionalRepsDay2}
-                        onChange={(e) => set("additionalRepsDay2", e.target.value)}
-                      />
-                    </FormField>
-                  </div>
+                  <FormField label="Primary major" required>
+                    <Select value={form.primaryMajor} onValueChange={(v) => set("primaryMajor", v as MajorCode)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select major code" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-64">
+                        {MAJORS.map((m) => (
+                          <SelectItem key={m.code} value={m.code}>
+                            {m.name} ({m.code})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Majors recruited — select all that apply">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto rounded-md border border-border p-2">
+                      {MAJORS.map((m) => (
+                        <label key={m.code} className="flex items-center gap-2 text-xs">
+                          <Checkbox
+                            checked={form.majorsRecruited.includes(m.code)}
+                            onCheckedChange={() =>
+                              toggleInList(form.majorsRecruited, m.code, (next) => set("majorsRecruited", next))
+                            }
+                          />
+                          {m.code}
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
+                  <FormField label="Degree levels — select all that apply">
+                    <div className="flex flex-wrap gap-2">
+                      {DEGREE_OPTIONS.map((d) => (
+                        <label key={d} className="flex items-center gap-1.5 text-xs border rounded-md px-2 py-1">
+                          <Checkbox
+                            checked={form.degreeLevels.includes(d)}
+                            onCheckedChange={() => toggleInList(form.degreeLevels, d, (next) => set("degreeLevels", next))}
+                          />
+                          {d}
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
+                  <FormField label="Position types — select all that apply">
+                    <div className="flex flex-wrap gap-2">
+                      {POSITION_OPTIONS.map((d) => (
+                        <label key={d} className="flex items-center gap-1.5 text-xs border rounded-md px-2 py-1">
+                          <Checkbox
+                            checked={form.positionTypes.includes(d)}
+                            onCheckedChange={() => toggleInList(form.positionTypes, d, (next) => set("positionTypes", next))}
+                          />
+                          {d}
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
+                  <FormField label="Work authorization — select all that apply">
+                    <div className="flex flex-wrap gap-2">
+                      {WORK_AUTH_OPTIONS.map((d) => (
+                        <label key={d} className="flex items-center gap-1.5 text-xs border rounded-md px-2 py-1">
+                          <Checkbox
+                            checked={form.workAuthorization.includes(d)}
+                            onCheckedChange={() =>
+                              toggleInList(form.workAuthorization, d, (next) => set("workAuthorization", next))
+                            }
+                          />
+                          {d}
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
                 </FormSection>
               </div>
 

@@ -13,6 +13,7 @@ import {
   Settings,
   AlertCircle,
   Briefcase,
+  RefreshCw,
 } from "lucide-react"
 import { canAccessWorkspace } from "@/lib/auth/workspace-access-by-title"
 import type { Workspace } from "@/lib/rbac"
@@ -24,15 +25,20 @@ import type {
 } from "@/lib/types"
 import { ALL_REGISTRATION_STATUSES } from "@/lib/types"
 import { mapRawStatus } from "@/lib/statusMapping"
-import { getPackagePrice } from "@/lib/packagePricing"
+import { getPackagePrice, LOCAL_STORAGE_KEYS } from "@/lib/packagePricing"
 import { semesterLabel } from "@/lib/format"
+import { useLocalStorageState } from "@/hooks/use-local-storage"
+import { applyF26Overrides } from "@/lib/f26MergeCompanies"
+import { buildActiveF26View, getF26Meta, type F26RegistrationOverride } from "@/lib/f26Registration"
 import { RegistrationsView } from "@/components/views/registrations-view"
 import { CompanyDashboardView } from "@/components/views/company-dashboard-view"
 import { CareerFairAnalyticsView } from "@/components/views/career-fair-analytics-view"
-import { RegistrationFormDialog } from "@/components/registration-form"
 import { FinanceWorkspace } from "@/components/workspaces/finance-workspace"
 import { HospitalityWorkspace } from "@/components/workspaces/hospitality-workspace"
 import { OperationsWorkspace } from "@/components/workspaces/operations-workspace"
+import { useF26Registrations } from "@/hooks/useF26Registrations"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 
 type Tab =
   | "registrations"
@@ -80,42 +86,78 @@ export function CareerFairHubDashboard({
   registrationCompanies,
 }: Props) {
   const [tab, setTab] = useState<Tab>("registrations")
+  const [registrationOverrides, setRegistrationOverrides] = useLocalStorageState<
+    Record<string, F26RegistrationOverride>
+  >(LOCAL_STORAGE_KEYS.registrationOverrides, {})
+  const [assignments] = useLocalStorageState<Record<string, string>>(LOCAL_STORAGE_KEYS.assignments, {})
+
+  const exportSheet = useF26Registrations(currentSemester === "F26")
+
+  const mergedRegistrationCompanies = useMemo(() => {
+    let base: CompanyRecord[]
+    if (currentSemester !== "F26") {
+      base = registrationCompanies
+    } else if (exportSheet.error && exportSheet.companies.length === 0) {
+      base = []
+    } else if (exportSheet.companies.length > 0) {
+      base = exportSheet.companies
+    } else {
+      base = []
+    }
+    return applyF26Overrides(base, registrationOverrides, currentSemester)
+  }, [
+    currentSemester,
+    registrationCompanies,
+    exportSheet.companies,
+    exportSheet.error,
+    registrationOverrides,
+  ])
 
   const stats = useMemo(() => {
     let confirmed = 0
     let pending = 0
-    let waitlisted = 0
-    let cancelled = 0
+    let canceled = 0
+    let denied = 0
     let receivables = 0
     let totalEntries = 0
-    for (const c of registrationCompanies) {
+    let symplicityRemaining = 0
+    let dueSoon = 0
+    let overdue = 0
+    for (const c of mergedRegistrationCompanies) {
       const reg = c.currentRegistration
       if (!reg) continue
       totalEntries++
-      const s: RegistrationStatus =
-        mapRawStatus(reg.status) ?? "Pending"
-      if (s === "Confirmed" || s === "BTT Confirmed" || s === "1 to 2 Day Accepted") {
+      const s: RegistrationStatus = mapRawStatus(reg.status) ?? "Pending"
+      const meta = getF26Meta(reg)
+      if (s === "Pending" && !meta.symplicityUpdated) symplicityRemaining++
+      const v = buildActiveF26View(c, currentSemester, `${currentSemester}:${c.id}`, assignments)
+      if (v && v.deadlineLabel === "Due soon") dueSoon++
+      if (v && v.deadlineLabel === "Overdue") overdue++
+      if (s === "Confirmed") {
         confirmed++
         const price = getPackagePrice(reg?.package ?? null) ?? 0
         receivables += price
-      } else if (s === "Pending" || s === "BTT Pending" || s === "1 to 2 Day Pending") {
+      } else if (s === "Pending") {
         pending++
-      } else if (s === "Waitlisted") {
-        waitlisted++
-      } else if (s === "Cancelled") {
-        cancelled++
+      } else if (s === "Canceled") {
+        canceled++
+      } else if (s === "Denied") {
+        denied++
       }
     }
     return {
       confirmed,
       pending,
-      waitlisted,
-      cancelled,
+      canceled,
+      denied,
       totalEntries,
       normalized: totalEntries,
       receivables,
+      symplicityRemaining,
+      dueSoon,
+      overdue,
     }
-  }, [registrationCompanies])
+  }, [mergedRegistrationCompanies, currentSemester, assignments])
 
   const visibleTabs = useMemo(() => {
     return tabConfig.filter((t) => {
@@ -202,8 +244,8 @@ export function CareerFairHubDashboard({
                 />
               ) : (
                 <StatBadge
-                  count={stats.waitlisted}
-                  label="Waitlisted"
+                  count={stats.symplicityRemaining}
+                  label="Symplicity updates left"
                   color="bg-blue-50 border-blue-200 text-blue-800"
                 />
               )}
@@ -218,12 +260,11 @@ export function CareerFairHubDashboard({
                 <div className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs text-blue-700">
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                   <span>
-                    {registrationCompanies.length} active {semesterLabel(currentSemester)} registration
-                    {registrationCompanies.length === 1 ? "" : "s"}
+                    {mergedRegistrationCompanies.length} active {semesterLabel(currentSemester)} registration
+                    {mergedRegistrationCompanies.length === 1 ? "" : "s"}
                   </span>
                 </div>
               )}
-              {canAccessWorkspace(allowedWorkspaces, "registrations") && <RegistrationFormDialog />}
             </div>
           </div>
         </div>
@@ -255,21 +296,64 @@ export function CareerFairHubDashboard({
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         {tab === "registrations" && (
           <div>
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-balance text-foreground">
-                Company Registrations
-              </h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {registrationCompanies.length} active {semesterLabel(currentSemester)} registration
-                {registrationCompanies.length === 1 ? "" : "s"}. Historical fair data is
-                available in each company profile.
-              </p>
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-balance text-foreground">
+                  Company Registrations
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {mergedRegistrationCompanies.length} active {semesterLabel(currentSemester)} registration
+                  {mergedRegistrationCompanies.length === 1 ? "" : "s"}. Historical fair data is
+                  available in each company profile.
+                </p>
+              </div>
+              {currentSemester === "F26" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border-primary/30 bg-background"
+                  disabled={exportSheet.loading}
+                  title="Reload Export tab from Google Sheets (bypasses day-long browser cache)"
+                  onClick={() => void exportSheet.refresh(true)}
+                >
+                  <RefreshCw
+                    className={`mr-2 h-4 w-4 shrink-0 ${exportSheet.loading ? "animate-spin" : ""}`}
+                  />
+                  Sync Google Sheets
+                </Button>
+              )}
             </div>
+            {currentSemester === "F26" && exportSheet.loading && (
+              <Alert className="mb-4 border-border">
+                <AlertTitle>Loading registrations</AlertTitle>
+                <AlertDescription>Fetching F26 rows from the Google Sheet Export tab…</AlertDescription>
+              </Alert>
+            )}
+            {currentSemester === "F26" &&
+              !exportSheet.loading &&
+              !exportSheet.error &&
+              mergedRegistrationCompanies.length === 0 && (
+                <Alert className="mb-4 border-border">
+                  <AlertTitle>No F26 registrations found</AlertTitle>
+                  <AlertDescription>
+                    No F26 registrations found in the connected sheet.
+                  </AlertDescription>
+                </Alert>
+              )}
+            {currentSemester === "F26" && exportSheet.error && !exportSheet.loading && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertTitle>Could not load F26 registrations from Google Sheets.</AlertTitle>
+                <AlertDescription>{exportSheet.error}</AlertDescription>
+              </Alert>
+            )}
             <RegistrationsView
-              companies={registrationCompanies}
+              companies={mergedRegistrationCompanies}
               semesterOrder={semesterOrder}
               currentSemester={currentSemester}
               majorAnalytics={majorAnalytics}
+              setRegistrationOverrides={setRegistrationOverrides}
+              onExportRefresh={(force) => void exportSheet.refresh(force)}
             />
           </div>
         )}
@@ -302,10 +386,12 @@ export function CareerFairHubDashboard({
               </p>
             </div>
             <CareerFairAnalyticsView
-              companies={registrationCompanies}
+              companies={mergedRegistrationCompanies}
               historicalCompanies={allCompanies}
               activeFairLabel={semesterLabel(currentSemester)}
               majorAnalytics={majorAnalytics}
+              currentSemester={currentSemester}
+              assignments={assignments}
             />
           </div>
         )}
@@ -313,7 +399,13 @@ export function CareerFairHubDashboard({
         {tab === "finance" && <FinanceWorkspace />}
         {tab === "hospitality" && <HospitalityWorkspace />}
         {tab === "operations" && (
-          <OperationsWorkspace activeFairLabel={semesterLabel(currentSemester)} activeCompanyCount={registrationCompanies.length} />
+          <OperationsWorkspace
+            activeFairLabel={semesterLabel(currentSemester)}
+            activeCompanyCount={mergedRegistrationCompanies.length}
+            registrationCompanies={mergedRegistrationCompanies}
+            currentSemester={currentSemester}
+            assignments={assignments}
+          />
         )}
       </main>
 
@@ -324,7 +416,7 @@ export function CareerFairHubDashboard({
             <p>
               Your role: <span className="font-medium text-foreground">{secTitle}</span>
               {" · "}
-              {ALL_REGISTRATION_STATUSES.length} status types tracked
+              Primary registration statuses: {ALL_REGISTRATION_STATUSES.join(", ")}. BTT and 1-to-2-day are tracked separately.
             </p>
           </div>
         </div>

@@ -36,20 +36,28 @@ import type {
   CompanyRecord,
   MajorAnalytics,
   RegistrationStatus,
+  SemesterCode,
 } from "@/lib/types"
 import { ALL_REGISTRATION_STATUSES, FINAL_STATUSES } from "@/lib/types"
-import { mapRawStatus, STATUS_BADGE_COLORS } from "@/lib/statusMapping"
-import { DEFAULT_PACKAGE_PRICING, LOCAL_STORAGE_KEYS, getPackagePrice } from "@/lib/packagePricing"
+import { bttBadgeClass, mapRawStatus, STATUS_BADGE_COLORS } from "@/lib/statusMapping"
+import { DEFAULT_F26_PACKAGE_PRICING, LOCAL_STORAGE_KEYS, getPackagePrice } from "@/lib/packagePricing"
 import { useLocalStorageState } from "@/hooks/use-local-storage"
 import { getCompanyScore } from "@/lib/companyScoring"
 import { getDaysUntilDeadline, getMissingInfoLabels } from "@/lib/companyFlags"
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format"
+
+import { ACTIVE_FAIR } from "@/lib/fairConfig"
+import { buildActiveF26View, getF26Meta } from "@/lib/f26Registration"
+import { MAJOR_CODES_ORDERED } from "@/lib/majors"
+import { defaultBoothRowsFromMajorAnalytics } from "@/lib/defaultBoothByMajor"
 
 type Props = {
   companies: CompanyRecord[]
   historicalCompanies: CompanyRecord[]
   activeFairLabel: string
   majorAnalytics: MajorAnalytics[]
+  currentSemester: SemesterCode
+  assignments: Record<string, string>
 }
 
 export function CareerFairAnalyticsView({
@@ -57,17 +65,26 @@ export function CareerFairAnalyticsView({
   historicalCompanies,
   activeFairLabel,
   majorAnalytics,
+  currentSemester,
+  assignments,
 }: Props) {
   const [packagePricing, setPackagePricing] = useLocalStorageState(
     LOCAL_STORAGE_KEYS.packagePricing,
-    DEFAULT_PACKAGE_PRICING,
-  )
-  const [assignments] = useLocalStorageState<Record<string, string>>(
-    LOCAL_STORAGE_KEYS.assignments,
-    {},
+    DEFAULT_F26_PACKAGE_PRICING,
   )
 
-  // ---- Status counts ----
+  const seedBoothRows = useMemo(() => defaultBoothRowsFromMajorAnalytics(majorAnalytics), [majorAnalytics])
+  const [boothRows, setBoothRows] = useLocalStorageState<typeof seedBoothRows | null>(
+    LOCAL_STORAGE_KEYS.boothAnalyticsOverrides,
+    null,
+  )
+  const boothsForEdit = boothRows ?? seedBoothRows
+
+  const updateBoothRow = (idx: number, patch: Partial<(typeof seedBoothRows)[number]>) => {
+    const base = boothRows ?? seedBoothRows
+    const next = base.map((row, i) => (i === idx ? { ...row, ...patch } : row))
+    setBoothRows(next)
+  }
   const statusCounts = useMemo(() => {
     const counts: Record<RegistrationStatus, number> = ALL_REGISTRATION_STATUSES.reduce(
       (acc, s) => {
@@ -101,9 +118,8 @@ export function CareerFairAnalyticsView({
     return Array.from(counts.values()).sort((a, b) => b.companies - a.companies)
   }, [companies])
 
-  // Active-cycle booth totals. The current Chevron filler seed does
-  // not include booth-count requests, so requested/confirmed booth counts stay 0
-  // until an active registration supplies that field.
+  // Active-cycle booth totals. Export-driven registrations do not populate booth-request fields here yet,
+  // so requested/confirmed booth aggregates stay 0 until wired end-to-end.
   const boothTotals = useMemo(() => {
     return { requested: 0, confirmed: 0, allocated: 0, wedReq: 0, wedFinal: 0, thuReq: 0, thuFinal: 0 }
   }, [])
@@ -125,7 +141,7 @@ export function CareerFairAnalyticsView({
       byPackage[tier].count++
       byPackage[tier].revenue += price
       totalRevenue += price
-      if (status === "Confirmed" || status === "BTT Confirmed" || status === "1 to 2 Day Accepted") {
+      if (status === "Confirmed") {
         confirmedRevenue += price
       } else if (!FINAL_STATUSES.has(status)) {
         atRiskRevenue += price
@@ -191,7 +207,7 @@ export function CareerFairAnalyticsView({
     for (const c of companies) {
       const reg = c.currentRegistration
       const status = mapRawStatus(reg?.status) ?? null
-      const assignedTo = assignments[c.id] ?? "Unassigned"
+      const assignedTo = assignments[`${currentSemester}:${c.id}`] ?? assignments[c.id] ?? "Unassigned"
       const deadline = getDaysUntilDeadline(c)
       const missing = getMissingInfoLabels(c)
       if (deadline != null && deadline <= 7 && status && !FINAL_STATUSES.has(status)) {
@@ -229,11 +245,54 @@ export function CareerFairAnalyticsView({
       const order: Record<typeof a.type, number> = { danger: 0, warning: 1, info: 2 }
       return order[a.type] - order[b.type]
     })
-  }, [companies, assignments])
+  }, [companies, assignments, currentSemester])
+
+  const workflowCounts = useMemo(() => {
+    const btt = { Pending: 0, Confirmed: 0 }
+    const o2 = { Pending: 0, Confirmed: 0 }
+    for (const c of companies) {
+      const reg = c.currentRegistration
+      if (!reg || reg.semester !== ACTIVE_FAIR.code) continue
+      const m = getF26Meta(reg)
+      if (m.bttStatus === "Pending" || m.bttStatus === "Confirmed") btt[m.bttStatus]++
+      if (m.oneToTwoDayStatus === "Pending" || m.oneToTwoDayStatus === "Confirmed")
+        o2[m.oneToTwoDayStatus]++
+    }
+    return { btt, o2 }
+  }, [companies])
+
+  const workflowTileStatuses = ["Pending", "Confirmed"] as const
+
+  const representationRows = useMemo(() => {
+    const active = companies.filter((c) => c.currentRegistration?.semester === ACTIVE_FAIR.code)
+    const n = active.length || 1
+    const primary = new Map<string, number>()
+    const recruited = new Map<string, number>()
+    let recruitedHits = 0
+    for (const c of active) {
+      const v = buildActiveF26View(c, currentSemester, `${currentSemester}:${c.id}`, assignments)
+      if (!v?.primaryMajor) continue
+      primary.set(v.primaryMajor, (primary.get(v.primaryMajor) ?? 0) + 1)
+      for (const m of v.majorsRecruited) {
+        recruited.set(m, (recruited.get(m) ?? 0) + 1)
+        recruitedHits++
+      }
+    }
+    const denomRec = recruitedHits || 1
+    const boothDefaults = defaultBoothRowsFromMajorAnalytics(majorAnalytics)
+    const allocMap = new Map(boothDefaults.map((r) => [r.majorCode, r.allocatedBooths]))
+    const totalAlloc = boothDefaults.reduce((s, r) => s + r.allocatedBooths, 0) || 1
+    return MAJOR_CODES_ORDERED.map((code) => ({
+      code,
+      allocPct: ((allocMap.get(code) ?? 0) / totalAlloc) * 100,
+      primaryPct: ((primary.get(code) ?? 0) / n) * 100,
+      recruitedPct: ((recruited.get(code) ?? 0) / denomRec) * 100,
+    }))
+  }, [companies, currentSemester, assignments, majorAnalytics])
 
   const funnel = useMemo(() => {
     const registered = total
-    const confirmed = statusCounts.Confirmed + statusCounts["BTT Confirmed"] + statusCounts["1 to 2 Day Accepted"]
+    const confirmed = statusCounts.Confirmed
     return { registered, confirmed, attended: 0, hires: 0 }
   }, [statusCounts, total])
 
@@ -254,37 +313,83 @@ export function CareerFairAnalyticsView({
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          {/* KPI grid */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {ALL_REGISTRATION_STATUSES.map((s) => (
-              <Card key={s} className={`border ${STATUS_BADGE_COLORS[s]} p-3`}>
-                <p className="text-xs font-medium uppercase tracking-wide opacity-90">{s}</p>
-                <p className="mt-1 text-2xl font-bold">{statusCounts[s] || 0}</p>
-              </Card>
-            ))}
-            <Card className="border-border bg-card p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total registered</p>
-              <p className="mt-1 text-2xl font-bold">{total}</p>
-            </Card>
-            <Card className="border-border bg-card p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Allotted booths</p>
-              <p className="mt-1 text-2xl font-bold">{formatNumber(boothTotals.allocated)}</p>
-            </Card>
-            <Card className="border-border bg-card p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Confirmed booths</p>
-              <p className="mt-1 text-2xl font-bold">{formatNumber(boothTotals.confirmed)}</p>
-            </Card>
-            <Card className="border-border bg-card p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Vacant booths</p>
-              <p className="mt-1 text-2xl font-bold">
-                {formatNumber(Math.max(0, boothTotals.allocated - boothTotals.confirmed))}
-              </p>
-            </Card>
-            <Card className="border-border bg-card p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Active majors</p>
-              <p className="mt-1 text-2xl font-bold">{activeMajorRows.length}</p>
-            </Card>
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold">Registration decisions ({activeFairLabel} active)</h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {(["Confirmed", "Denied", "Pending", "Canceled"] as const).map((s) => (
+                <Card key={s} className={`border ${STATUS_BADGE_COLORS[s]} p-3`}>
+                  <p className="text-xs font-medium uppercase tracking-wide opacity-90">{s}</p>
+                  <p className="mt-1 text-2xl font-bold">{statusCounts[s] ?? 0}</p>
+                </Card>
+              ))}
+            </div>
           </div>
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold">BTT</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {workflowTileStatuses.map((s) => (
+                <Card key={s} className={`border p-3 ${bttBadgeClass(s)}`}>
+                  <p className="text-xs font-medium uppercase tracking-wide opacity-90">{s}</p>
+                  <p className="mt-1 text-2xl font-bold">{workflowCounts.btt[s]}</p>
+                </Card>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold">1-2 day</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {workflowTileStatuses.map((s) => (
+                <Card key={s} className={`border p-3 ${bttBadgeClass(s)}`}>
+                  <p className="text-xs font-medium uppercase tracking-wide opacity-90">{s}</p>
+                  <p className="mt-1 text-2xl font-bold">{workflowCounts.o2[s]}</p>
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          <Card className="p-4">
+            <h3 className="text-center text-base font-bold">F26 Representation by Primary Major</h3>
+            <p className="text-center text-xs text-muted-foreground mb-2">% Allocated Booths vs % of Primary Major of F26 Registered Companies</p>
+            <div style={{ height: 400 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={representationRows} margin={{ top: 8, right: 12, left: 4, bottom: 64 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="code" tick={{ fontSize: 10 }} angle={-75} textAnchor="end" height={72} interval={0} />
+                  <YAxis
+                    tickFormatter={(v) => `${Math.round(v)}%`}
+                    label={{ value: "Percentage of Companies", angle: -90, position: "insideLeft", style: { textAnchor: "middle" } }}
+                  />
+                  <Tooltip formatter={(v: number) => `${v.toFixed(1)}%`} />
+                  <Legend verticalAlign="top" wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="allocPct" name="% Allocated Booths" fill="#2563eb" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="primaryPct" name="% of Primary Major of F26 Registered Companies" fill="#ea580c" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <h3 className="text-center text-base font-bold">F26 Representation by All Majors Recruited</h3>
+            <p className="text-center text-xs text-muted-foreground mb-2">% Allocated Booths vs % of All Majors Recruited of F26 Registered Companies</p>
+            <div style={{ height: 400 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={representationRows} margin={{ top: 8, right: 12, left: 4, bottom: 64 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="code" tick={{ fontSize: 10 }} angle={-75} textAnchor="end" height={72} interval={0} />
+                  <YAxis tickFormatter={(v) => `${Math.round(v)}%`} label={{ value: "Percentage of Companies", angle: -90, position: "insideLeft" }} />
+                  <Tooltip formatter={(v: number) => `${v.toFixed(1)}%`} />
+                  <Legend verticalAlign="top" wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="allocPct" name="% Allocated Booths" fill="#2563eb" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="recruitedPct" name="% of All Majors Recruited of F26 Registered Companies" fill="#ea580c" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card className="border-border bg-card p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total active registrations</p>
+            <p className="mt-1 text-2xl font-bold">{total}</p>
+          </Card>
 
           {/* Funnel */}
           <Card className="p-4">
@@ -319,8 +424,8 @@ export function CareerFairAnalyticsView({
               <BoothBar label="Allocated → confirmed" req={boothTotals.allocated} fin={boothTotals.confirmed} />
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              The active {activeFairLabel} Chevron filler registration does not include requested booth
-              counts yet, so booth totals remain 0 until active registration data includes them.
+              Booth-request aggregates from Export registrations are not connected to this panel yet,
+              so totals remain 0 until booth counts flow through active registration fields.
             </p>
           </Card>
 
@@ -381,42 +486,63 @@ export function CareerFairAnalyticsView({
           </Card>
 
           <Card className="p-4">
-            <h3 className="text-sm font-semibold">Historical benchmark: booth shortage / surplus</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Booth analytics by major (editable)</h3>
+              <Button size="sm" variant="outline" onClick={() => setBoothRows(null)}>
+                Reset to defaults
+              </Button>
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              This table uses prior Excel benchmark data and is not counted as {activeFairLabel} active
-              progress.
+              Values persist in this browser ({LOCAL_STORAGE_KEYS.boothAnalyticsOverrides}). Major order follows the SEC official list.
             </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 text-left">Major</th>
-                    <th className="px-3 py-2 text-right">Allocated</th>
-                    <th className="px-3 py-2 text-right">Confirmed</th>
-                    <th className="px-3 py-2 text-right">Δ</th>
-                    <th className="px-3 py-2 text-right">Fill %</th>
+                    <th className="px-3 py-2 text-right">Allocated Booths</th>
+                    <th className="px-3 py-2 text-right">Confirmed Booths</th>
+                    <th className="px-3 py-2 text-right">Requested Booths</th>
+                    <th className="px-3 py-2 text-left">Notes</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {majorAnalytics.map((m) => {
-                    const delta = m.totalBoothsConfirmed - m.allocatedBooths
-                    return (
-                      <tr key={m.major} className="border-t border-border">
-                        <td className="px-3 py-2 font-medium">{m.major}</td>
-                        <td className="px-3 py-2 text-right">{formatNumber(m.allocatedBooths)}</td>
-                        <td className="px-3 py-2 text-right">{formatNumber(m.totalBoothsConfirmed)}</td>
-                        <td
-                          className={`px-3 py-2 text-right font-medium ${
-                            delta > 0 ? "text-emerald-700" : delta < 0 ? "text-red-700" : "text-muted-foreground"
-                          }`}
-                        >
-                          {delta > 0 ? "+" : ""}
-                          {delta}
-                        </td>
-                        <td className="px-3 py-2 text-right">{formatPercent(m.fillPercent ?? null)}</td>
-                      </tr>
-                    )
-                  })}
+                  {boothsForEdit.map((row, idx) => (
+                    <tr key={row.majorCode} className="border-t border-border">
+                      <td className="px-3 py-2 font-mono text-xs font-medium">{row.majorCode}</td>
+                      <td className="px-3 py-2 text-right">
+                        <Input
+                          className="ml-auto h-8 w-20 text-right"
+                          type="number"
+                          value={row.allocatedBooths}
+                          onChange={(e) => updateBoothRow(idx, { allocatedBooths: Number(e.target.value) || 0 })}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <Input
+                          className="ml-auto h-8 w-20 text-right"
+                          type="number"
+                          value={row.confirmedBooths}
+                          onChange={(e) => updateBoothRow(idx, { confirmedBooths: Number(e.target.value) || 0 })}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <Input
+                          className="ml-auto h-8 w-20 text-right"
+                          type="number"
+                          value={row.requestedBooths}
+                          onChange={(e) => updateBoothRow(idx, { requestedBooths: Number(e.target.value) || 0 })}
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <Input
+                          value={row.notes}
+                          onChange={(e) => updateBoothRow(idx, { notes: e.target.value })}
+                          placeholder="Notes"
+                        />
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -604,7 +730,7 @@ export function CareerFairAnalyticsView({
             </div>
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
               <RevenueCard label="Confirmed revenue" value={revenue.confirmedRevenue} tone="success" />
-              <RevenueCard label="At-risk (pending / waitlist)" value={revenue.atRiskRevenue} tone="warning" />
+              <RevenueCard label="At-risk (pending packages)" value={revenue.atRiskRevenue} tone="warning" />
               <RevenueCard label="All current packages" value={revenue.totalRevenue} tone="info" />
             </div>
             <div className="mt-4">
@@ -629,12 +755,12 @@ export function CareerFairAnalyticsView({
               Override default prices below. Stored per browser; affects revenue forecasts.
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {Object.keys(DEFAULT_PACKAGE_PRICING).map((key) => (
+              {Object.keys(DEFAULT_F26_PACKAGE_PRICING).map((key) => (
                 <div key={key} className="flex items-center gap-2">
                   <Label className="w-40 truncate text-xs">{key}</Label>
                   <Input
                     type="number"
-                    value={packagePricing[key] ?? DEFAULT_PACKAGE_PRICING[key]}
+                    value={packagePricing[key] ?? DEFAULT_F26_PACKAGE_PRICING[key]}
                     onChange={(e) =>
                       setPackagePricing((prev) => ({
                         ...prev,
@@ -646,7 +772,7 @@ export function CareerFairAnalyticsView({
               ))}
             </div>
             <div className="mt-3 flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setPackagePricing(DEFAULT_PACKAGE_PRICING)}>
+              <Button size="sm" variant="outline" onClick={() => setPackagePricing(DEFAULT_F26_PACKAGE_PRICING)}>
                 Reset to defaults
               </Button>
             </div>

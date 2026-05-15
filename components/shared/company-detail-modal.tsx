@@ -48,14 +48,12 @@ import type {
   CompanyChatMessage,
   CompanyScoring,
   CoordinatorNote,
-  CreditsRecord,
   MajorAnalytics,
   RegistrationStatus,
   SemesterCode,
   WelcomeSocialRecord,
 } from "@/lib/types"
 import { ASSIGNMENT_OPTIONS } from "@/lib/types"
-import { ScoreCard } from "./score-card"
 import { RelationshipCard } from "./relationship-card"
 import { AttendanceChart } from "./attendance-chart"
 import { FlagsList } from "./flags-list"
@@ -64,10 +62,12 @@ import { STATUS_BADGE_COLORS, PACKAGE_BADGE_COLORS } from "@/lib/statusMapping"
 import { LOCAL_STORAGE_KEYS, getPackagePrice } from "@/lib/packagePricing"
 import { useLocalStorageState } from "@/hooks/use-local-storage"
 import { ACTIVE_FAIR } from "@/lib/fairConfig"
+import { SheetCreditsSection } from "@/components/shared/sheet-credits-section"
+import { CompanyEnrichmentPanel } from "@/components/shared/company-enrichment-panel"
 
 type Props = {
   company: CompanyRecord | null
-  scoring: CompanyScoring | null
+  scoring?: CompanyScoring | null
   status: RegistrationStatus
   semesterOrder: SemesterCode[]
   majorAnalytics: MajorAnalytics[]
@@ -79,7 +79,6 @@ type Props = {
 
 export function CompanyDetailModal({
   company,
-  scoring,
   status,
   semesterOrder,
   majorAnalytics,
@@ -93,10 +92,6 @@ export function CompanyDetailModal({
     LOCAL_STORAGE_KEYS.notes,
     {},
   )
-  const [creditsByCompany, setCreditsByCompany] = useLocalStorageState<Record<string, CreditsRecord>>(
-    LOCAL_STORAGE_KEYS.credits,
-    {},
-  )
   const [welcomeSocialByCompany, setWelcomeSocialByCompany] = useLocalStorageState<
     Record<string, WelcomeSocialRecord>
   >(LOCAL_STORAGE_KEYS.welcomeSocial, {})
@@ -106,24 +101,22 @@ export function CompanyDetailModal({
   )
 
   const notes = company ? notesByCompany[company.id] ?? [] : []
-  const credits = company ? creditsByCompany[company.id] ?? { added: 0, distributed: 0, notes: "" } : null
   const welcome = company
     ? welcomeSocialByCompany[company.id] ?? { attending: "Unknown", repsAttending: null, notes: "" }
     : null
   const chat = company ? chatByCompany[company.id] ?? [] : []
 
   const flags = useMemo(() => {
-    if (!company || !scoring) return []
+    if (!company) return []
     return getCompanyFlags({
       company,
-      scoring,
       status,
       assignedTo,
       majorAnalytics,
     })
-  }, [company, scoring, status, assignedTo, majorAnalytics])
+  }, [company, status, assignedTo, majorAnalytics])
 
-  if (!company || !scoring) return null
+  if (!company) return null
   const reg = company.currentRegistration
   const missing = reg ? getMissingInfoLabels(company) : []
   const deadlineDays = getDaysUntilDeadline(company)
@@ -193,9 +186,6 @@ export function CompanyDetailModal({
                   {reg.package.tier} {reg.package.days ?? ""}
                 </Badge>
               )}
-              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
-                Score {scoring.totalScore}
-              </Badge>
             </div>
           </div>
         </DialogHeader>
@@ -207,7 +197,6 @@ export function CompanyDetailModal({
               <TabsTrigger value="registration">Registration</TabsTrigger>
               <TabsTrigger value="attendance">Attendance &amp; Hiring</TabsTrigger>
               <TabsTrigger value="relationship">Relationship</TabsTrigger>
-              <TabsTrigger value="score">Score</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
               <TabsTrigger value="chat">Chat</TabsTrigger>
               <TabsTrigger value="actions">Actions</TabsTrigger>
@@ -232,11 +221,9 @@ export function CompanyDetailModal({
                 />
                 <KPI icon={Users} label="Employees" value={formatNumber(company.employees ?? null)} />
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <KPI label="Total Hires" value={formatNumber(company.totalHires)} icon={GraduationCap} />
-                <KPI label="Bachelor's" value={formatNumber(company.bachelorHires ?? null)} icon={GraduationCap} />
-                <KPI label="Master's" value={formatNumber(company.masterHires ?? null)} icon={GraduationCap} />
-                <KPI label="Doctorate" value={formatNumber(company.doctorateHires ?? null)} icon={GraduationCap} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <KPI label="Fall 2025 hired" value={company.hiredFall2025 ?? "Unknown"} icon={GraduationCap} />
+                <KPI label="Spring 2025 hired" value={company.hiredSpring2025 ?? "Unknown"} icon={GraduationCap} />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <KPI
@@ -393,11 +380,12 @@ export function CompanyDetailModal({
               {/* Past registration history */}
               <div className="rounded-lg border border-border bg-card p-4">
                 <h4 className="mb-3 text-sm font-semibold">Historical registration history</h4>
-                <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                  {semesterOrder
+                {(() => {
+                  const histSemesters = semesterOrder
                     .slice()
                     .reverse()
                     .filter((s) => s !== ACTIVE_FAIR.code)
+                  const cards = histSemesters
                     .map((s) => {
                       const r = company.registrationHistory[s]
                       if (!r) return null
@@ -413,104 +401,92 @@ export function CompanyDetailModal({
                           <p className="text-xs text-muted-foreground">{r.boothLocation ?? "—"}</p>
                         </div>
                       )
-                    })}
-                </div>
+                    })
+                    .filter(Boolean)
+                  return cards.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No historical records found for this company.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">{cards}</div>
+                  )
+                })()}
               </div>
             </TabsContent>
 
             <TabsContent value="attendance" className="space-y-4">
               <div className="rounded-lg border border-border bg-card p-4">
-                <h4 className="mb-3 text-sm font-semibold">Attendance &amp; hiring per semester</h4>
+                <h4 className="mb-3 text-sm font-semibold">Attended fair history</h4>
                 <AttendanceChart company={company} semesterOrder={semesterOrder} />
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
                 <h4 className="mb-3 text-sm font-semibold">Package history &amp; estimated value</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Semester</th>
-                        <th className="px-3 py-2 text-left">Package</th>
-                        <th className="px-3 py-2 text-left">Days</th>
-                        <th className="px-3 py-2 text-right">Est. value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {semesterOrder
-                        .slice()
-                        .reverse()
-                        .map((s) => {
-                          const pkg = company.packageHistory[s]
-                          const att = company.attendanceHistory[s]
-                          if (!pkg && !att) return null
-                          const price = getPackagePrice(pkg ?? null)
-                          return (
-                            <tr key={s} className="border-t border-border">
-                              <td className="px-3 py-2 font-medium">{shortSemesterLabel(s)}</td>
-                              <td className="px-3 py-2">
-                                {pkg?.tier ? (
-                                  <Badge variant="outline" className={PACKAGE_BADGE_COLORS[pkg.tier] ?? ""}>
-                                    {pkg.tier}
-                                  </Badge>
-                                ) : (
-                                  "—"
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-muted-foreground">{pkg?.days ?? "—"}</td>
-                              <td className="px-3 py-2 text-right">{formatCurrency(price)}</td>
-                            </tr>
-                          )
-                        })}
-                    </tbody>
-                  </table>
-                </div>
+                {(() => {
+                  const rows = semesterOrder
+                    .slice()
+                    .reverse()
+                    .map((s) => {
+                      const pkg = company.packageHistory[s]
+                      const att = company.attendanceHistory[s]
+                      if (!pkg && !att) return null
+                      const price = getPackagePrice(pkg ?? null)
+                      return (
+                        <tr key={s} className="border-t border-border">
+                          <td className="px-3 py-2 font-medium">{shortSemesterLabel(s)}</td>
+                          <td className="px-3 py-2">
+                            {pkg?.tier ? (
+                              <Badge variant="outline" className={PACKAGE_BADGE_COLORS[pkg.tier] ?? ""}>
+                                {pkg.tier}
+                              </Badge>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground">{pkg?.days ?? "—"}</td>
+                          <td className="px-3 py-2 text-right">{formatCurrency(price)}</td>
+                        </tr>
+                      )
+                    })
+                    .filter(Boolean)
+                  return rows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No historical data available from connected sheets.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Semester</th>
+                            <th className="px-3 py-2 text-left">Package</th>
+                            <th className="px-3 py-2 text-left">Days</th>
+                            <th className="px-3 py-2 text-right">Est. value</th>
+                          </tr>
+                        </thead>
+                        <tbody>{rows}</tbody>
+                      </table>
+                    </div>
+                  )
+                })()}
               </div>
             </TabsContent>
 
             <TabsContent value="relationship" className="space-y-4">
-              <RelationshipCard relationship={company.relationship} />
-              {company.f25Selection && (
-                <div className="rounded-lg border border-border bg-card p-4">
-                  <h4 className="mb-3 text-sm font-semibold">F25 selection scoring</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                    <Stat label="Revenue" value={formatNumber(company.f25Selection.revenueScore ?? null)} />
-                    <Stat label="Work Auth" value={formatNumber(company.f25Selection.workAuthScore ?? null)} />
-                    <Stat label="Glassdoor" value={formatNumber(company.f25Selection.glassdoorScore ?? null)} />
-                    <Stat label="Relationship" value={formatNumber(company.f25Selection.relationshipScore ?? null)} />
-                    <Stat label="Total" value={formatNumber(company.f25Selection.totalScore ?? null)} />
-                    <Stat label="Weeks Pending" value={formatNumber(company.f25Selection.weeksPending ?? null)} />
-                    <Stat label="Decision" value={company.f25Selection.decision ?? "—"} />
-                    <Stat label="Primary major" value={company.f25Selection.primaryMajor ?? "—"} />
-                  </div>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="score" className="space-y-4">
-              <ScoreCard scoring={scoring} />
-              <div className="rounded-lg border border-border bg-card p-4">
-                <h4 className="mb-2 text-sm font-semibold">Why this score</h4>
-                <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
-                  {scoring.explanation.map((e, i) => (
-                    <li key={i}>{e}</li>
-                  ))}
-                </ul>
-              </div>
               <div className="rounded-lg border border-border bg-card p-4">
                 <h4 className="mb-3 text-sm font-semibold">Flags</h4>
                 <FlagsList flags={flags} />
               </div>
+              <RelationshipCard relationship={company.relationship} />
             </TabsContent>
 
             <TabsContent value="notes" className="space-y-4">
-              {credits && (
-                <CreditsEditor
-                  credits={credits}
-                  onChange={(next) =>
-                    setCreditsByCompany((prev) => ({ ...prev, [company.id]: next }))
-                  }
-                />
-              )}
+              <SheetCreditsSection
+                companyName={company.canonicalName}
+                exportRowNumber={reg?.exportRowNumber ?? undefined}
+              />
+              {ACTIVE_FAIR.code === "F26" && reg?.exportRowNumber != null ? (
+                <CompanyEnrichmentPanel exportRowNumber={reg.exportRowNumber} />
+              ) : null}
               <NotesEditor
                 notes={notes}
                 onAdd={addNote}
@@ -538,7 +514,7 @@ export function CompanyDetailModal({
                       Status
                     </Label>
                     <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      Active seed
+                      {reg?.exportRowNumber != null ? "Google Sheet · Export" : "Dataset"}
                     </span>
                   </div>
                   <div className="mt-2">
@@ -553,8 +529,9 @@ export function CompanyDetailModal({
                     )}
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Active {ACTIVE_FAIR.label} status comes from the active registration seed.
-                    Spring 2026 and earlier statuses stay in the historical Excel background.
+                    {reg?.exportRowNumber != null
+                      ? `Active ${ACTIVE_FAIR.label} registration comes from the connected Export tab.`
+                      : `Active ${ACTIVE_FAIR.label} registration follows the generated workbook dataset when present.`}
                   </p>
                 </div>
                 <div className="rounded-lg border border-border bg-card p-4">
@@ -648,56 +625,6 @@ function Field({
         {label}
       </span>
       <span className="ml-auto truncate text-right text-sm text-foreground">{value}</span>
-    </div>
-  )
-}
-
-function CreditsEditor({
-  credits,
-  onChange,
-}: {
-  credits: CreditsRecord
-  onChange: (next: CreditsRecord) => void
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold">Credits</h4>
-        <Badge variant="outline" className="bg-muted/50 text-xs">
-          Internal · stored locally
-        </Badge>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <div>
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Credits added
-          </Label>
-          <Input
-            type="number"
-            value={credits.added}
-            onChange={(e) => onChange({ ...credits, added: Number(e.target.value) || 0 })}
-          />
-        </div>
-        <div>
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Credits distributed
-          </Label>
-          <Input
-            type="number"
-            value={credits.distributed}
-            onChange={(e) => onChange({ ...credits, distributed: Number(e.target.value) || 0 })}
-          />
-        </div>
-      </div>
-      <div className="mt-3">
-        <Label className="text-xs uppercase tracking-wide text-muted-foreground">Notes</Label>
-        <Textarea
-          value={credits.notes}
-          onChange={(e) => onChange({ ...credits, notes: e.target.value })}
-          rows={2}
-          placeholder="Why was this credit added or distributed?"
-        />
-      </div>
     </div>
   )
 }

@@ -7,13 +7,15 @@ import type {
 } from "./types"
 import { FINAL_STATUSES } from "./types"
 import { parseRegisteredOn } from "./statusMapping"
+import { getF26Meta } from "./f26Registration"
 
 const SIX_WEEKS_MS = 6 * 7 * 24 * 60 * 60 * 1000
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
 export type DerivedFlagsInput = {
   company: CompanyRecord
-  scoring: CompanyScoring
+  /** Optional; kept for call-site compatibility. Flags do not use numeric scores. */
+  scoring?: CompanyScoring | null
   status: RegistrationStatus | null
   assignedTo: string
   majorAnalytics: MajorAnalytics[]
@@ -61,9 +63,10 @@ export function isActionRequired(input: DerivedFlagsInput): boolean {
 }
 
 export function getCompanyFlags(input: DerivedFlagsInput): CompanyFlag[] {
-  const { company, scoring, status, assignedTo, majorAnalytics, balanceDueUSD } = input
+  const { company, status, assignedTo, majorAnalytics, balanceDueUSD } = input
   const flags: CompanyFlag[] = []
   const reg = company.currentRegistration
+  const bm = reg ? getF26Meta(reg) : null
   const missing = getMissingInfoLabels(company)
   const deadlineDays = getDaysUntilDeadline(company)
 
@@ -107,37 +110,6 @@ export function getCompanyFlags(input: DerivedFlagsInput): CompanyFlag[] {
       priority: 50,
     })
   }
-  if (scoring.priorityBadge === "High Priority") {
-    flags.push({
-      type: "success",
-      label: "High value company to retain",
-      description: scoring.recommendationReason,
-      priority: 75,
-    })
-  }
-  if (
-    company.totalHires >= 8 &&
-    (reg?.package?.tier?.toLowerCase() === "basic" || !reg?.package)
-  ) {
-    flags.push({
-      type: "info",
-      label: "Strong hiring, low package",
-      description: `${company.totalHires} hires across past semesters but currently on a basic package — outreach opportunity.`,
-      priority: 55,
-    })
-  }
-  if (
-    reg &&
-    company.totalHires === 0 &&
-    ((reg.repsDay1 ?? 0) + (reg.repsDay2 ?? 0)) >= 3
-  ) {
-    flags.push({
-      type: "warning",
-      label: "Low hiring, high booth/staff usage",
-      description: "Multiple reps but no hires on file — review allocation.",
-      priority: 50,
-    })
-  }
   // Under-indexed major support
   if (reg?.topMajor || company.f25Selection?.primaryMajor) {
     const code = (reg?.topMajor || company.f25Selection?.primaryMajor || "").match(/\(([A-Z]{3,5})\)/)?.[1]
@@ -155,7 +127,7 @@ export function getCompanyFlags(input: DerivedFlagsInput): CompanyFlag[] {
         flags.push({
           type: "warning",
           label: `${code} already over-indexed`,
-          description: "Major has more than 80% allocation — consider waitlist or BTT.",
+          description: "Major has more than 80% allocation — consider BTT or 1-to-2-day options.",
           priority: 45,
         })
       }
@@ -169,7 +141,7 @@ export function getCompanyFlags(input: DerivedFlagsInput): CompanyFlag[] {
       priority: 30,
     })
   }
-  if (status === "BTT Pending" || status === "1 to 2 Day Pending" || status === "Pending") {
+  if (bm && bm.bttStatus === "Pending" && status === "Pending") {
     if (deadlineDays != null && deadlineDays <= 14 && deadlineDays > 7) {
       flags.push({
         type: "info",

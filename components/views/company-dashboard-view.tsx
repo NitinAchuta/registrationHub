@@ -17,9 +17,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Building2,
   ChevronsUpDown,
+  Clock,
   GraduationCap,
   Search,
-  TrendingUp,
 } from "lucide-react"
 import type {
   CompanyRecord,
@@ -30,9 +30,7 @@ import type {
 import { mapRawStatus, STATUS_BADGE_COLORS, PACKAGE_BADGE_COLORS } from "@/lib/statusMapping"
 import { LOCAL_STORAGE_KEYS, getPackagePrice } from "@/lib/packagePricing"
 import { useLocalStorageState } from "@/hooks/use-local-storage"
-import { getCompanyScore } from "@/lib/companyScoring"
-import { getCompanyFlags } from "@/lib/companyFlags"
-import { ScoreCard } from "@/components/shared/score-card"
+import { getCompanyFlags, getDaysUntilDeadline } from "@/lib/companyFlags"
 import { RelationshipCard } from "@/components/shared/relationship-card"
 import { AttendanceChart } from "@/components/shared/attendance-chart"
 import { FlagsList } from "@/components/shared/flags-list"
@@ -81,43 +79,34 @@ export function CompanyDashboardView({
     return mapRawStatus(selected.currentRegistration?.status) ?? "Pending"
   }, [selected])
 
-  const scoring = useMemo(
-    () =>
-      selected
-        ? getCompanyScore(
-            selected,
-            majorAnalytics,
-            selected.currentRegistration ? status : null,
-          )
-        : null,
-    [selected, majorAnalytics, status],
-  )
-
   const flags = useMemo(() => {
-    if (!selected || !scoring) return []
+    if (!selected) return []
     return getCompanyFlags({
       company: selected,
-      scoring,
       status,
       assignedTo: assignments[`${currentSemester}:${selected.id}`] ?? "Unassigned",
       majorAnalytics,
     })
-  }, [selected, scoring, status, assignments, majorAnalytics])
+  }, [selected, status, assignments, currentSemester, majorAnalytics])
 
-  // Top recommended companies from the historical/background dataset.
-  const topRecommended = useMemo(() => {
+  const priorityFollowUps = useMemo(() => {
     return sorted
-      .filter((c) => c.currentRegistration || c.f25Selection || c.semestersAttended.length > 0)
+      .filter((c) => c.currentRegistration)
       .map((c) => {
         const s = mapRawStatus(c.currentRegistration?.status) ?? "Pending"
-        const sc = getCompanyScore(c, majorAnalytics, c.currentRegistration ? s : null)
-        return { company: c, scoring: sc, status: s }
+        const days = getDaysUntilDeadline(c)
+        return { company: c, status: s, days }
       })
-      .sort((a, b) => b.scoring.totalScore - a.scoring.totalScore)
+      .filter((x) => x.status === "Pending")
+      .sort((a, b) => {
+        const ad = a.days ?? 9999
+        const bd = b.days ?? 9999
+        return ad - bd
+      })
       .slice(0, 6)
-  }, [sorted, majorAnalytics])
+  }, [sorted])
 
-  if (!selected || !scoring) {
+  if (!selected) {
     return (
       <div className="rounded-md border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
         No companies in dataset.
@@ -214,10 +203,7 @@ export function CompanyDashboardView({
                 {reg.package.tier} {reg.package.days ?? ""}
               </Badge>
             )}
-            <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
-              Score {scoring.totalScore}
-            </Badge>
-            <Button size="sm" onClick={() => setProfileOpen(true)}>
+            <Button size="sm" variant="default" onClick={() => setProfileOpen(true)}>
               View Full Profile
             </Button>
           </div>
@@ -462,7 +448,6 @@ export function CompanyDashboardView({
         </div>
 
         <div className="space-y-4">
-          <ScoreCard scoring={scoring} />
           <RelationshipCard relationship={selected.relationship} />
           <Card className="p-4">
             <h3 className="text-sm font-semibold">Flags</h3>
@@ -473,53 +458,46 @@ export function CompanyDashboardView({
         </div>
       </div>
 
-      {/* Top recommendations */}
+      {/* Pending registrations needing coordinator follow-up */}
       <Card className="p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">
-            Top scoring companies in the current cycle
-          </h3>
-          <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
-            <TrendingUp className="mr-1 h-3 w-3" />
-            High value
+          <h3 className="text-sm font-semibold">Pending decisions (soonest deadline first)</h3>
+          <Badge variant="outline" className="bg-amber-500/10 text-amber-800 border-amber-300">
+            <Clock className="mr-1 h-3 w-3" />
+            Workflow
           </Badge>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {topRecommended.map(({ company, scoring: s, status }) => (
-            <button
-              key={company.id}
-              onClick={() => setSelectedId(company.id)}
-              className={`text-left rounded-md border p-3 transition hover:border-primary hover:bg-muted/30 ${
-                company.id === selected.id ? "border-primary bg-muted/30" : "border-border"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="truncate text-sm font-medium">{company.canonicalName}</p>
-                <span
-                  className={`text-sm font-bold ${
-                    s.totalScore >= 70
-                      ? "text-emerald-700"
-                      : s.totalScore >= 55
-                        ? "text-blue-700"
-                        : "text-amber-700"
-                  }`}
-                >
-                  {s.totalScore}
-                </span>
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {company.industry ?? "—"} · {status}
-              </p>
-              <p className="mt-1 truncate text-xs text-muted-foreground">{s.recommendation}</p>
-            </button>
-          ))}
+          {priorityFollowUps.length === 0 ? (
+            <p className="text-sm text-muted-foreground col-span-full">No pending active registrations.</p>
+          ) : (
+            priorityFollowUps.map(({ company, status: st, days }) => (
+              <button
+                key={company.id}
+                type="button"
+                onClick={() => setSelectedId(company.id)}
+                className={`text-left rounded-md border p-3 transition hover:border-primary hover:bg-muted/30 ${
+                  company.id === selected.id ? "border-primary bg-muted/30" : "border-border"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="truncate text-sm font-medium">{company.canonicalName}</p>
+                  <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                    {days == null ? "—" : days < 0 ? "Overdue" : days === 0 ? "Due today" : `${days}d left`}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {company.industry ?? "—"} · {st}
+                </p>
+              </button>
+            ))
+          )}
         </div>
       </Card>
 
       {/* Detail modal */}
       <CompanyDetailModal
         company={selected}
-        scoring={scoring}
         status={status}
         semesterOrder={semesterOrder}
         majorAnalytics={majorAnalytics}
