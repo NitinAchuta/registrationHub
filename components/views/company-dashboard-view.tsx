@@ -31,6 +31,7 @@ import { mapRawStatus, STATUS_BADGE_COLORS, PACKAGE_BADGE_COLORS } from "@/lib/s
 import { LOCAL_STORAGE_KEYS, getPackagePrice } from "@/lib/packagePricing"
 import { useLocalStorageState } from "@/hooks/use-local-storage"
 import { getCompanyFlags, getDaysUntilDeadline } from "@/lib/companyFlags"
+import { getEffectiveSemestersAttended } from "@/lib/companyAttendance"
 import { RelationshipCard } from "@/components/shared/relationship-card"
 import { AttendanceChart } from "@/components/shared/attendance-chart"
 import { FlagsList } from "@/components/shared/flags-list"
@@ -85,6 +86,11 @@ export function CompanyDashboardView({
     if (!activeReg) return "Pending"
     return mapRawStatus(activeReg.status) ?? "Pending"
   }, [activeReg])
+
+  const semestersAttended = useMemo(
+    () => (selected ? getEffectiveSemestersAttended(selected) : []),
+    [selected],
+  )
 
   const flags = useMemo(() => {
     if (!selected) return []
@@ -276,7 +282,7 @@ export function CompanyDashboardView({
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Historical Career Fair Background</h3>
               <Badge variant="outline" className="bg-muted/50 text-xs">
-                {selected.semestersAttended.length} semesters attended
+                {semestersAttended.length} semesters attended
               </Badge>
             </div>
             <div className="mt-3">
@@ -417,10 +423,10 @@ export function CompanyDashboardView({
                 )}
                 {selected.relationship.alumniPresence && <Tag tone="info">Strong alumni presence</Tag>}
                 {selected.relationship.outsideEngagement && <Tag tone="info">Outside CF engagement</Tag>}
-                {!selected.semestersAttended.length && (
+                {!semestersAttended.length && (
                   <Tag tone="warning">No recent attendance</Tag>
                 )}
-                {selected.semestersAttended.length >= 3 && <Tag tone="success">Recurring employer</Tag>}
+                {semestersAttended.length >= 3 && <Tag tone="success">Recurring employer</Tag>}
               </div>
               {selected.relationship.outsideEngagementNote && (
                 <p className="mt-3 rounded-md border border-border bg-muted/30 p-2 text-xs">
@@ -434,7 +440,7 @@ export function CompanyDashboardView({
           {/* Donor / money */}
           <Card className="p-4">
             <h3 className="text-sm font-semibold">Money &amp; donor relationship</h3>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+            <div className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
               <KV
                 label="CoE donor"
                 value={selected.relationship.coeDonor ? "Yes" : "No"}
@@ -545,9 +551,9 @@ function KPI({
 
 function KV({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start justify-between gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5">
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className="ml-auto truncate text-right text-sm">{value}</span>
+    <div className="min-w-0 rounded-md border border-border bg-muted/30 px-3 py-2.5">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-medium text-foreground break-words">{value}</p>
     </div>
   )
 }

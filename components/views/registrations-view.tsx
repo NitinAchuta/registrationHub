@@ -703,7 +703,7 @@ export function RegistrationsView({
                       <td className="px-3 py-2 text-xs">{r.virtualFair ? "Yes" : "No"}</td>
                       {currentSemester === "F26" ? (
                         <>
-                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                          <td className="min-w-[11.5rem] px-3 py-2" onClick={(e) => e.stopPropagation()}>
                             <EventInterestSelect
                               value={meta.welcomeSocialInterest}
                               onValueChange={(v: CompanyEventInterest) =>
@@ -714,7 +714,7 @@ export function RegistrationsView({
                               }
                             />
                           </td>
-                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                          <td className="min-w-[11.5rem] px-3 py-2" onClick={(e) => e.stopPropagation()}>
                             <EventInterestSelect
                               value={meta.companyChatInterest}
                               onValueChange={(v: CompanyEventInterest) =>
@@ -725,7 +725,7 @@ export function RegistrationsView({
                               }
                             />
                           </td>
-                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                          <td className="min-w-[11.5rem] px-3 py-2" onClick={(e) => e.stopPropagation()}>
                             <EventInterestSelect
                               value={meta.careerDiscoveryFairInterest}
                               onValueChange={(v: CompanyEventInterest) =>
@@ -1069,18 +1069,18 @@ function CompanyDrawer({
   return (
     <>
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle className="text-balance">{company.canonicalName}</SheetTitle>
-          <SheetDescription>
+      <SheetContent className="w-full overflow-y-auto px-6 pb-8 pt-5 sm:max-w-2xl">
+        <SheetHeader className="space-y-1 p-0">
+          <SheetTitle className="text-balance pr-8">{company.canonicalName}</SheetTitle>
+          <SheetDescription className="text-pretty">
             {semesterLabel(currentSemester)} Registration · {company.industry ?? "Industry not on file"}
             {company.variants.length > 1 ? ` · ${company.variants.length} variants merged` : ""}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-4 space-y-4">
+        <div className="mt-6 space-y-5">
           {f26View && currentSemester === "F26" && (
-            <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+            <div className="rounded-md border border-primary/20 bg-primary/5 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Decision Summary
               </p>
@@ -1134,7 +1134,7 @@ function CompanyDrawer({
 
           {currentSemester === "F26" && reg && (
             <Section title="Event interest">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">Welcome Social</p>
                   <EventInterestSelect
@@ -1198,7 +1198,7 @@ function CompanyDrawer({
           {reg?.exportRowNumber != null && (
             <>
               <Section title="Google Sheet · Contact">
-                <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                   <KV label="Registering contact" value={reg.registeringContact ?? "—"} />
                   <KV label="Email" value={reg.contactEmail ?? "—"} />
                 </div>
@@ -1206,9 +1206,9 @@ function CompanyDrawer({
 
               <Section title="Phone">
                 {!phoneEdit ? (
-                  <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+                  <div className="space-y-2 rounded-md border border-border bg-muted/30 px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium">
+                      <span className="text-sm font-medium break-all">
                         {reg.contactPhoneDisplay?.trim() ? reg.contactPhoneDisplay : "—"}
                       </span>
                       {reg.phoneNormalizedIssue ? (
@@ -1759,8 +1759,8 @@ function CompanyDetailModalLauncher({
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <section className="space-y-3">
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {title}
       </h4>
       {children}
@@ -1778,12 +1778,12 @@ function KV({
   icon?: typeof Filter
 }) {
   return (
-    <div className="rounded-md border border-border bg-muted/30 p-2">
+    <div className="min-w-0 rounded-md border border-border bg-muted/30 px-3 py-2.5">
       <p className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-        {Icon && <Icon className="h-3 w-3" />}
+        {Icon && <Icon className="h-3 w-3 shrink-0" />}
         {label}
       </p>
-      <p className="mt-0.5 truncate text-sm font-medium">{value}</p>
+      <p className="mt-1 text-sm font-medium text-foreground break-words">{value}</p>
     </div>
   )
 }

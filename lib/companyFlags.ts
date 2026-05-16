@@ -8,6 +8,7 @@ import type {
 import { FINAL_STATUSES } from "./types"
 import { parseRegisteredOn } from "./statusMapping"
 import { getF26Meta } from "./f26Registration"
+import { getEffectiveSemestersAttended } from "./companyAttendance"
 
 const SIX_WEEKS_MS = 6 * 7 * 24 * 60 * 60 * 1000
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -102,7 +103,10 @@ export function getCompanyFlags(input: DerivedFlagsInput): CompanyFlag[] {
       priority: 80,
     })
   }
-  if (company.semestersAttended.length === 0 && company.relationship.attendedPastFairs) {
+  if (
+    getEffectiveSemestersAttended(company).length === 0 &&
+    company.relationship.attendedPastFairs
+  ) {
     flags.push({
       type: "info",
       label: "Strong relationship, no recent attendance",

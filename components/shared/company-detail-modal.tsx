@@ -58,6 +58,7 @@ import { RelationshipCard } from "./relationship-card"
 import { AttendanceChart } from "./attendance-chart"
 import { FlagsList } from "./flags-list"
 import { getCompanyFlags, getMissingInfoLabels, getDaysUntilDeadline } from "@/lib/companyFlags"
+import { getEffectiveSemestersAttended } from "@/lib/companyAttendance"
 import { STATUS_BADGE_COLORS, PACKAGE_BADGE_COLORS } from "@/lib/statusMapping"
 import { LOCAL_STORAGE_KEYS, getPackagePrice } from "@/lib/packagePricing"
 import { useLocalStorageState } from "@/hooks/use-local-storage"
@@ -119,6 +120,7 @@ export function CompanyDetailModal({
   }, [company, status, assignedTo, majorAnalytics])
 
   if (!company) return null
+  const semestersAttended = getEffectiveSemestersAttended(company)
   const reg = resolveRegistrationForSemester(company, ACTIVE_FAIR.code)
   const missing = reg ? getMissingInfoLabels(company) : []
   const deadlineDays = getDaysUntilDeadline(company)
@@ -242,8 +244,8 @@ export function CompanyDetailModal({
                 <KPI
                   label="Semesters Attended"
                   value={
-                    company.semestersAttended.length
-                      ? company.semestersAttended.map(shortSemesterLabel).join(", ")
+                    semestersAttended.length
+                      ? semestersAttended.map(shortSemesterLabel).join(", ")
                       : "None on record"
                   }
                   icon={Building2}

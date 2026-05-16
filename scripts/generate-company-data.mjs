@@ -615,7 +615,19 @@ for (const [, rec] of companies) {
   const semestersAttended = []
   for (const sem of SEMESTER_ORDER) {
     const att = rec.attendanceHistory[sem]
-    if (att?.attended === true) semestersAttended.push(sem)
+    if (att?.attended === true) {
+      semestersAttended.push(sem)
+      continue
+    }
+    const reg = rec.registrationHistory[sem]
+    const status = reg?.status ? String(reg.status).trim().toLowerCase() : ""
+    if (status === "confirmed" || status === "c") semestersAttended.push(sem)
+  }
+  const f25Decision = rec.f25Selection?.decision
+    ? String(rec.f25Selection.decision).trim().toLowerCase()
+    : ""
+  if ((f25Decision === "confirmed" || f25Decision === "c") && !semestersAttended.includes("F25")) {
+    semestersAttended.push("F25")
   }
   const totalHires = Object.values(rec.hiringHistory).reduce((s, n) => s + (n || 0), 0)
   const out = {

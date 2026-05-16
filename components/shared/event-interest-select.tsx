@@ -32,7 +32,13 @@ export function EventInterestSelect({
 
   return (
     <Select value={value} onValueChange={(v) => onValueChange(v as CompanyEventInterest)}>
-      <SelectTrigger className={cn("h-7 w-[7.5rem] text-xs", className)}>
+      <SelectTrigger
+        className={cn(
+          "h-8 w-full min-w-[10.5rem] text-xs whitespace-normal",
+          "[&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:whitespace-normal",
+          className,
+        )}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
