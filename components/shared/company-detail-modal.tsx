@@ -62,8 +62,10 @@ import { STATUS_BADGE_COLORS, PACKAGE_BADGE_COLORS } from "@/lib/statusMapping"
 import { LOCAL_STORAGE_KEYS, getPackagePrice } from "@/lib/packagePricing"
 import { useLocalStorageState } from "@/hooks/use-local-storage"
 import { ACTIVE_FAIR } from "@/lib/fairConfig"
+import { resolveRegistrationForSemester } from "@/lib/f26MergeCompanies"
 import { SheetCreditsSection } from "@/components/shared/sheet-credits-section"
 import { CompanyEnrichmentPanel } from "@/components/shared/company-enrichment-panel"
+import { HistoricalCompanyProfilePanel } from "@/components/shared/historical-company-profile-panel"
 
 type Props = {
   company: CompanyRecord | null
@@ -117,7 +119,7 @@ export function CompanyDetailModal({
   }, [company, status, assignedTo, majorAnalytics])
 
   if (!company) return null
-  const reg = company.currentRegistration
+  const reg = resolveRegistrationForSemester(company, ACTIVE_FAIR.code)
   const missing = reg ? getMissingInfoLabels(company) : []
   const deadlineDays = getDaysUntilDeadline(company)
   const repCount = reg?.repCount ?? (reg?.repsDay1 ?? 0) + (reg?.repsDay2 ?? 0)
@@ -221,10 +223,10 @@ export function CompanyDetailModal({
                 />
                 <KPI icon={Users} label="Employees" value={formatNumber(company.employees ?? null)} />
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <KPI label="Fall 2025 hired" value={company.hiredFall2025 ?? "Unknown"} icon={GraduationCap} />
-                <KPI label="Spring 2025 hired" value={company.hiredSpring2025 ?? "Unknown"} icon={GraduationCap} />
-              </div>
+              <p className="text-xs text-muted-foreground">
+                Exit survey hiring history and prior career fair packages are in the Registration tab
+                under Historical Company Profile (local master workbook).
+              </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <KPI
                   label="Willing to Sponsor"
@@ -257,6 +259,9 @@ export function CompanyDetailModal({
             </TabsContent>
 
             <TabsContent value="registration" className="space-y-4">
+              {company.canonicalName.trim() ? (
+                <HistoricalCompanyProfilePanel companyName={company.canonicalName} />
+              ) : null}
               {!reg && (
                 <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
                   No active {ACTIVE_FAIR.label} registration yet.

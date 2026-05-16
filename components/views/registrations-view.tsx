@@ -79,10 +79,13 @@ import {
   buildActiveF26View,
   defaultF26Meta,
   getF26Meta,
+  patchF26Meta,
   updateBttStatus,
   updateOneToTwoDayStatus,
   updateRegistrationStatus,
 } from "@/lib/f26Registration"
+import { EventInterestSelect } from "@/components/shared/event-interest-select"
+import type { CompanyEventInterest } from "@/lib/types"
 import { getMajorLabel } from "@/lib/majors"
 import {
   getCompanyFlags,
@@ -103,6 +106,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { SheetCreditsSection } from "@/components/shared/sheet-credits-section"
 import { CompanyEnrichmentPanel } from "@/components/shared/company-enrichment-panel"
+import { HistoricalCompanyProfilePanel } from "@/components/shared/historical-company-profile-panel"
+import { useMasterCompanyProfiles } from "@/hooks/useMasterCompanyProfiles"
 import { FlagsList } from "@/components/shared/flags-list"
 import { CompanyDetailModal } from "@/components/shared/company-detail-modal"
 import { cn } from "@/lib/utils"
@@ -172,6 +177,8 @@ export function RegistrationsView({
     LOCAL_STORAGE_KEYS.resolvedMissingInfo,
     {},
   )
+
+  const historicalProfiles = useMasterCompanyProfiles(currentSemester === "F26")
 
   const enriched = useMemo(() => {
     const today = new Date()
@@ -448,6 +455,11 @@ export function RegistrationsView({
               <tr>
                 <th className="w-px"></th>
                 <th className="whitespace-nowrap px-3 py-2 text-left">Company</th>
+                {currentSemester === "F26" ? (
+                  <th className="whitespace-nowrap px-3 py-2 text-left" title="Local master company profile workbook">
+                    Historical
+                  </th>
+                ) : null}
                 <th className="whitespace-nowrap px-3 py-2 text-left">Contact</th>
                 <th className="whitespace-nowrap px-3 py-2 text-left">Email</th>
                 <th className="whitespace-nowrap px-3 py-2 text-left">Phone</th>
@@ -472,6 +484,25 @@ export function RegistrationsView({
                 <th className="whitespace-nowrap px-3 py-2 text-left">Primary Major</th>
                 <th className="whitespace-nowrap px-3 py-2 text-left">Majors Recruited</th>
                 <th className="whitespace-nowrap px-3 py-2 text-left">Virtual Fair</th>
+                {currentSemester === "F26" ? (
+                  <>
+                    <th
+                      className="whitespace-nowrap px-3 py-2 text-left"
+                      title="Interested in Welcome Social"
+                    >
+                      Welcome Social
+                    </th>
+                    <th className="whitespace-nowrap px-3 py-2 text-left" title="Interested in Company Chat">
+                      Company Chat
+                    </th>
+                    <th
+                      className="whitespace-nowrap px-3 py-2 text-left"
+                      title="Interested in Career Discovery Fair"
+                    >
+                      Career Disc. Fair
+                    </th>
+                  </>
+                ) : null}
                 <th className="whitespace-nowrap px-3 py-2 text-left">Actions</th>
                 <th className="w-px"></th>
               </tr>
@@ -486,6 +517,10 @@ export function RegistrationsView({
                     f26View?.primaryMajor != null ? getMajorLabel(f26View.primaryMajor) : r.topMajor ?? "—"
                   const majorsLabel =
                     f26View?.majorsRecruited?.length ? f26View.majorsRecruited.join(", ") : (r.majors?.join(", ") ?? "—")
+                  const histMatch =
+                    currentSemester === "F26"
+                      ? historicalProfiles.matchLabel(company.canonicalName)
+                      : null
                   const daysLeftCell =
                     f26View != null ? (
                       <span
@@ -543,6 +578,35 @@ export function RegistrationsView({
                           </span>
                         </div>
                       </td>
+                      {currentSemester === "F26" ? (
+                        <td className="px-3 py-2 text-xs">
+                          {histMatch === "Found" ? (
+                            <Badge
+                              variant="outline"
+                              className="border-emerald-200 bg-emerald-50 text-emerald-800"
+                              title="Historical profile available"
+                            >
+                              Found
+                            </Badge>
+                          ) : histMatch === "Multiple" ? (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-200 bg-amber-50 text-amber-900"
+                              title="Multiple possible historical matches"
+                            >
+                              Multiple
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-muted-foreground"
+                              title="No historical profile found"
+                            >
+                              Not Found
+                            </Badge>
+                          )}
+                        </td>
+                      ) : null}
                       <td className="max-w-[7rem] truncate px-3 py-2 text-xs">{r.registeringContact ?? "—"}</td>
                       <td className="max-w-[8rem] truncate px-3 py-2 text-xs">{r.contactEmail ?? "—"}</td>
                       <td className="max-w-[7rem] px-3 py-2 text-xs">
@@ -637,6 +701,43 @@ export function RegistrationsView({
                       <td className="max-w-[6rem] truncate px-3 py-2 text-xs">{primaryLabel}</td>
                       <td className="max-w-[8rem] truncate px-3 py-2 text-xs">{majorsLabel}</td>
                       <td className="px-3 py-2 text-xs">{r.virtualFair ? "Yes" : "No"}</td>
+                      {currentSemester === "F26" ? (
+                        <>
+                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                            <EventInterestSelect
+                              value={meta.welcomeSocialInterest}
+                              onValueChange={(v: CompanyEventInterest) =>
+                                persistRegistration(
+                                  company.id,
+                                  patchF26Meta(r, meta, { welcomeSocialInterest: v }).reg,
+                                )
+                              }
+                            />
+                          </td>
+                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                            <EventInterestSelect
+                              value={meta.companyChatInterest}
+                              onValueChange={(v: CompanyEventInterest) =>
+                                persistRegistration(
+                                  company.id,
+                                  patchF26Meta(r, meta, { companyChatInterest: v }).reg,
+                                )
+                              }
+                            />
+                          </td>
+                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                            <EventInterestSelect
+                              value={meta.careerDiscoveryFairInterest}
+                              onValueChange={(v: CompanyEventInterest) =>
+                                persistRegistration(
+                                  company.id,
+                                  patchF26Meta(r, meta, { careerDiscoveryFairInterest: v }).reg,
+                                )
+                              }
+                            />
+                          </td>
+                        </>
+                      ) : null}
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -688,7 +789,10 @@ export function RegistrationsView({
               )}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={28} className="px-3 py-12 text-center text-sm text-muted-foreground">
+                  <td
+                    colSpan={currentSemester === "F26" ? 31 : 28}
+                    className="px-3 py-12 text-center text-sm text-muted-foreground"
+                  >
                     {companies.length === 0 && currentSemester === "F26"
                       ? "No F26 registrations found in the connected sheet."
                       : "No companies match these filters."}
@@ -1028,6 +1132,36 @@ function CompanyDrawer({
             </div>
           )}
 
+          {currentSemester === "F26" && reg && (
+            <Section title="Event interest">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Welcome Social</p>
+                  <EventInterestSelect
+                    value={meta.welcomeSocialInterest}
+                    onValueChange={(v) => run(() => patchF26Meta(reg, meta, { welcomeSocialInterest: v }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Company Chat</p>
+                  <EventInterestSelect
+                    value={meta.companyChatInterest}
+                    onValueChange={(v) => run(() => patchF26Meta(reg, meta, { companyChatInterest: v }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Career Discovery Fair</p>
+                  <EventInterestSelect
+                    value={meta.careerDiscoveryFairInterest}
+                    onValueChange={(v) =>
+                      run(() => patchF26Meta(reg, meta, { careerDiscoveryFairInterest: v }))
+                    }
+                  />
+                </div>
+              </div>
+            </Section>
+          )}
+
           {/* Top summary */}
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className={STATUS_BADGE_COLORS[status]}>
@@ -1352,6 +1486,10 @@ function CompanyDrawer({
               </div>
             </>
           )}
+
+          {currentSemester === "F26" && company.canonicalName.trim() ? (
+            <HistoricalCompanyProfilePanel companyName={company.canonicalName} />
+          ) : null}
 
           <Section title={`Day(s) of ${semesterLabel(currentSemester)}`}>
             <div className="grid grid-cols-3 gap-2 text-sm">

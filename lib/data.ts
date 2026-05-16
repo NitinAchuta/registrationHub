@@ -611,68 +611,8 @@ export type HistoricalData = {
   engagement: number
 }
 
-export const historicalData: Record<string, HistoricalData[]> = {
-  Chevron: [
-    { semester: "Fall 2024", attended: 2, engagement: 72 },
-    { semester: "Spring 2025", attended: 3, engagement: 85 },
-    { semester: "Fall 2025", attended: 2, engagement: 78 },
-    { semester: "Spring 2026", attended: 3, engagement: 91 },
-  ],
-  ExxonMobil: [
-    { semester: "Fall 2024", attended: 3, engagement: 88 },
-    { semester: "Spring 2025", attended: 3, engagement: 90 },
-    { semester: "Fall 2025", attended: 3, engagement: 93 },
-    { semester: "Spring 2026", attended: 3, engagement: 96 },
-  ],
-  "Texas Instruments": [
-    { semester: "Fall 2024", attended: 2, engagement: 65 },
-    { semester: "Spring 2025", attended: 2, engagement: 71 },
-    { semester: "Fall 2025", attended: 2, engagement: 74 },
-    { semester: "Spring 2026", attended: 2, engagement: 80 },
-  ],
-  "Lockheed Martin": [
-    { semester: "Fall 2024", attended: 3, engagement: 91 },
-    { semester: "Spring 2025", attended: 3, engagement: 94 },
-    { semester: "Fall 2025", attended: 3, engagement: 92 },
-    { semester: "Spring 2026", attended: 3, engagement: 97 },
-  ],
-  Amazon: [
-    { semester: "Fall 2024", attended: 2, engagement: 77 },
-    { semester: "Spring 2025", attended: 2, engagement: 82 },
-    { semester: "Fall 2025", attended: 3, engagement: 86 },
-    { semester: "Spring 2026", attended: 3, engagement: 89 },
-  ],
-  Shell: [
-    { semester: "Fall 2024", attended: 1, engagement: 55 },
-    { semester: "Spring 2025", attended: 1, engagement: 60 },
-    { semester: "Fall 2025", attended: 1, engagement: 58 },
-    { semester: "Spring 2026", attended: 1, engagement: 63 },
-  ],
-  Halliburton: [
-    { semester: "Fall 2024", attended: 2, engagement: 70 },
-    { semester: "Spring 2025", attended: 2, engagement: 75 },
-    { semester: "Fall 2025", attended: 2, engagement: 79 },
-    { semester: "Spring 2026", attended: 2, engagement: 84 },
-  ],
-  Boeing: [
-    { semester: "Fall 2024", attended: 1, engagement: 61 },
-    { semester: "Spring 2025", attended: 2, engagement: 68 },
-    { semester: "Fall 2025", attended: 1, engagement: 64 },
-    { semester: "Spring 2026", attended: 2, engagement: 72 },
-  ],
-  Microsoft: [
-    { semester: "Fall 2024", attended: 3, engagement: 90 },
-    { semester: "Spring 2025", attended: 3, engagement: 93 },
-    { semester: "Fall 2025", attended: 3, engagement: 95 },
-    { semester: "Spring 2026", attended: 3, engagement: 98 },
-  ],
-  Schlumberger: [
-    { semester: "Fall 2024", attended: 1, engagement: 50 },
-    { semester: "Spring 2025", attended: 1, engagement: 48 },
-    { semester: "Fall 2025", attended: 1, engagement: 45 },
-    { semester: "Spring 2026", attended: 0, engagement: 30 },
-  ],
-}
+/** Legacy engagement chart data — no mock filler; use /api/company-profiles for hiring history. */
+export const historicalData: Record<string, HistoricalData[]> = {}
 
 export function getRecommendation(canonicalName: string): { recommended: boolean; reason: string } {
   const data = historicalData[canonicalName]

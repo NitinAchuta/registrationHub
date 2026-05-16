@@ -23,12 +23,18 @@ export type BttWorkflowStatus = "None" | "Pending" | "Confirmed" | "Denied"
 
 export type OneToTwoDayWorkflowStatus = "None" | "Pending" | "Confirmed" | "Denied"
 
+/** Company interest in ancillary F26 events (coordinator-tracked). */
+export type CompanyEventInterest = "Yes" | "No" | "Not indicated"
+
 export type F26CoordinatorMeta = {
   bttStatus: BttWorkflowStatus
   oneToTwoDayStatus: OneToTwoDayWorkflowStatus
   symplicityUpdated: boolean
   symplicityUpdatedAt?: string
   symplicityUpdatedBy?: string
+  welcomeSocialInterest: CompanyEventInterest
+  companyChatInterest: CompanyEventInterest
+  careerDiscoveryFairInterest: CompanyEventInterest
 }
 
 export type RegistrationRow = {
@@ -301,6 +307,53 @@ export type CompanyProfileNoteTag =
   | "Symplicity"
   | "BTT"
   | "1-to-2-Day"
+
+export type YesNoUnknown = "Yes" | "No" | "Unknown"
+
+export type CareerFairPackageHistory = {
+  term: "S26" | "F25" | "S25" | "F24" | "S24"
+  package: string | null
+  attended: boolean
+}
+
+export type ExitSurveyHiringHistory = {
+  term:
+    | "Fall 2021"
+    | "Spring 2022"
+    | "Fall 2022"
+    | "Spring 2023"
+    | "Fall 2023"
+    | "Spring 2024"
+    | "Fall 2024"
+    | "Spring 2025"
+    | "Fall 2025"
+  hiredStudents: YesNoUnknown
+  rawValue: string | null
+}
+
+export type HistoricalCompanyProfile = {
+  companyName: string
+  normalizedCompanyName: string
+  studentInterestInstagram: YesNoUnknown
+  exitSurveyHiringHistory: ExitSurveyHiringHistory[]
+  attendedCdfS26: YesNoUnknown
+  firstYearCareerFair: YesNoUnknown
+  careerFairPackageHistory: CareerFairPackageHistory[]
+  rgDecisions: {
+    s25: string | null
+    f25: string | null
+    s26: string | null
+  }
+  mostRecentCfRep: {
+    name: string | null
+    email: string | null
+  }
+  webTaContact: {
+    name: string | null
+    email: string | null
+  }
+  rawColumns: Record<string, string | null>
+}
 
 export type CompanyProfileNote = {
   id: string

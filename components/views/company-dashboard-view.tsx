@@ -35,7 +35,9 @@ import { RelationshipCard } from "@/components/shared/relationship-card"
 import { AttendanceChart } from "@/components/shared/attendance-chart"
 import { FlagsList } from "@/components/shared/flags-list"
 import { CompanyDetailModal } from "@/components/shared/company-detail-modal"
+import { HistoricalCompanyProfilePanel } from "@/components/shared/historical-company-profile-panel"
 import { formatCurrency, formatNumber, semesterLabel, shortSemesterLabel } from "@/lib/format"
+import { resolveRegistrationForSemester } from "@/lib/f26MergeCompanies"
 
 type Props = {
   companies: CompanyRecord[]
@@ -74,10 +76,15 @@ export function CompanyDashboardView({
     {},
   )
 
+  const activeReg = useMemo(
+    () => (selected ? resolveRegistrationForSemester(selected, currentSemester) : null),
+    [selected, currentSemester],
+  )
+
   const status: RegistrationStatus = useMemo(() => {
-    if (!selected) return "Pending"
-    return mapRawStatus(selected.currentRegistration?.status) ?? "Pending"
-  }, [selected])
+    if (!activeReg) return "Pending"
+    return mapRawStatus(activeReg.status) ?? "Pending"
+  }, [activeReg])
 
   const flags = useMemo(() => {
     if (!selected) return []
@@ -104,7 +111,7 @@ export function CompanyDashboardView({
         return ad - bd
       })
       .slice(0, 6)
-  }, [sorted])
+  }, [sorted, currentSemester])
 
   if (!selected) {
     return (
@@ -114,7 +121,7 @@ export function CompanyDashboardView({
     )
   }
 
-  const reg = selected.currentRegistration
+  const reg = activeReg
   const totalPackagesValue = Object.values(selected.packageHistory).reduce(
     (s, p) => s + (getPackagePrice(p) ?? 0),
     0,
@@ -241,6 +248,10 @@ export function CompanyDashboardView({
               </p>
             )}
           </Card>
+
+          {currentSemester === "F26" && selected.canonicalName.trim() ? (
+            <HistoricalCompanyProfilePanel companyName={selected.canonicalName} />
+          ) : null}
 
           {/* Overview KPI grid */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

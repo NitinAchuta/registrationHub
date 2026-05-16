@@ -457,9 +457,8 @@ const SEMESTER_ORDER = ["S22", "F22", "S23", "F23", "S24", "F24", "S25", "F25", 
           companyChatRaw: companyChatRaw || null,
         }
         rec.registrationHistory[sem] = registration
-        if (sem === "S26") {
-          rec.currentRegistration = registration
-        }
+        // Active F26 registrations come from Google Sheets Export only — do not set
+        // currentRegistration from historical CF workbook rows (e.g. S26).
         if (registration.package) rec.packageHistory[sem] = registration.package
       }
     }

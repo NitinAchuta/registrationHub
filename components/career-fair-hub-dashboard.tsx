@@ -28,8 +28,15 @@ import { mapRawStatus } from "@/lib/statusMapping"
 import { getPackagePrice, LOCAL_STORAGE_KEYS } from "@/lib/packagePricing"
 import { semesterLabel } from "@/lib/format"
 import { useLocalStorageState } from "@/hooks/use-local-storage"
-import { applyF26Overrides } from "@/lib/f26MergeCompanies"
-import { buildActiveF26View, getF26Meta, type F26RegistrationOverride } from "@/lib/f26Registration"
+import { applyF26Overrides, mergeF26ExportOntoCompanies } from "@/lib/f26MergeCompanies"
+import {
+  buildActiveF26View,
+  getF26Meta,
+  manualToCompanyRecord,
+  type F26ManualRegistration,
+  type F26RegistrationOverride,
+} from "@/lib/f26Registration"
+import { RegistrationFormDialog } from "@/components/registration-form"
 import { RegistrationsView } from "@/components/views/registrations-view"
 import { CompanyDashboardView } from "@/components/views/company-dashboard-view"
 import { CareerFairAnalyticsView } from "@/components/views/career-fair-analytics-view"
@@ -89,6 +96,10 @@ export function CareerFairHubDashboard({
   const [registrationOverrides, setRegistrationOverrides] = useLocalStorageState<
     Record<string, F26RegistrationOverride>
   >(LOCAL_STORAGE_KEYS.registrationOverrides, {})
+  const [manualF26Registrations, setManualF26Registrations] = useLocalStorageState<F26ManualRegistration[]>(
+    LOCAL_STORAGE_KEYS.manualF26Registrations,
+    [],
+  )
   const [assignments] = useLocalStorageState<Record<string, string>>(LOCAL_STORAGE_KEYS.assignments, {})
 
   const exportSheet = useF26Registrations(currentSemester === "F26")
@@ -104,14 +115,27 @@ export function CareerFairHubDashboard({
     } else {
       base = []
     }
-    return applyF26Overrides(base, registrationOverrides, currentSemester)
+    const withOverrides = applyF26Overrides(base, registrationOverrides, currentSemester)
+    if (currentSemester !== "F26") return withOverrides
+    const manualCompanies = manualF26Registrations.map(manualToCompanyRecord)
+    const ids = new Set(withOverrides.map((c) => c.id))
+    const extra = manualCompanies.filter((c) => !ids.has(c.id))
+    return [...withOverrides, ...extra]
   }, [
     currentSemester,
     registrationCompanies,
     exportSheet.companies,
     exportSheet.error,
     registrationOverrides,
+    manualF26Registrations,
   ])
+
+  /** Historical Excel + F26 Export overlay (Company Dashboard must not use stale S26 currentRegistration). */
+  const dashboardCompanies = useMemo(() => {
+    if (currentSemester !== "F26") return allCompanies
+    const withExport = mergeF26ExportOntoCompanies(allCompanies, exportSheet.companies, "F26")
+    return applyF26Overrides(withExport, registrationOverrides, currentSemester)
+  }, [allCompanies, currentSemester, exportSheet.companies, registrationOverrides])
 
   const stats = useMemo(() => {
     let confirmed = 0
@@ -308,20 +332,27 @@ export function CareerFairHubDashboard({
                 </p>
               </div>
               {currentSemester === "F26" && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 border-primary/30 bg-background"
-                  disabled={exportSheet.loading}
-                  title="Reload Export tab from Google Sheets (bypasses day-long browser cache)"
-                  onClick={() => void exportSheet.refresh(true)}
-                >
-                  <RefreshCw
-                    className={`mr-2 h-4 w-4 shrink-0 ${exportSheet.loading ? "animate-spin" : ""}`}
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <RegistrationFormDialog
+                    onManualRegistration={(entry) =>
+                      setManualF26Registrations((prev) => [...prev, entry])
+                    }
                   />
-                  Sync Google Sheets
-                </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-primary/30 bg-background"
+                    disabled={exportSheet.loading}
+                    title="Reload Export tab from Google Sheets (bypasses day-long browser cache)"
+                    onClick={() => void exportSheet.refresh(true)}
+                  >
+                    <RefreshCw
+                      className={`mr-2 h-4 w-4 shrink-0 ${exportSheet.loading ? "animate-spin" : ""}`}
+                    />
+                    Sync Google Sheets
+                  </Button>
+                </div>
               )}
             </div>
             {currentSemester === "F26" && exportSheet.loading && (
@@ -368,7 +399,7 @@ export function CareerFairHubDashboard({
               </p>
             </div>
             <CompanyDashboardView
-              companies={allCompanies}
+              companies={dashboardCompanies}
               semesterOrder={semesterOrder}
               currentSemester={currentSemester}
               majorAnalytics={majorAnalytics}

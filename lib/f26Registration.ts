@@ -59,6 +59,9 @@ export type F26ManualRegistration = {
   symplicityUpdatedBy?: string
   bttStatus: BttStatus
   oneToTwoDayStatus: OneToTwoDayStatus
+  welcomeSocialInterest: "Yes" | "No"
+  companyChatInterest: "Yes" | "No"
+  careerDiscoveryFairInterest: "Yes" | "No"
   notes?: string
 }
 
@@ -75,6 +78,9 @@ export function defaultF26Meta(): F26CoordinatorMeta {
     bttStatus: "None",
     oneToTwoDayStatus: "None",
     symplicityUpdated: false,
+    welcomeSocialInterest: "Not indicated",
+    companyChatInterest: "Not indicated",
+    careerDiscoveryFairInterest: "Not indicated",
   }
 }
 
@@ -316,6 +322,16 @@ export function updateOneToTwoDayStatus(
   return { reg: nextReg, override: { fullRegistration: nextReg } }
 }
 
+export function patchF26Meta(
+  reg: RegistrationRow,
+  meta: F26CoordinatorMeta,
+  patch: Partial<F26CoordinatorMeta>,
+): { reg: RegistrationRow; override: F26RegistrationOverride } {
+  const nextMeta: F26CoordinatorMeta = { ...meta, ...patch }
+  const nextReg: RegistrationRow = { ...reg, f26Meta: nextMeta }
+  return { reg: nextReg, override: { fullRegistration: nextReg } }
+}
+
 export function manualToCompanyRecord(m: F26ManualRegistration): CompanyRecord {
   const pkgRaw = `${m.packageTier} ${m.duration}`
   const reg: RegistrationRow = {
@@ -357,6 +373,9 @@ export function manualToCompanyRecord(m: F26ManualRegistration): CompanyRecord {
       symplicityUpdated: m.symplicityUpdated,
       symplicityUpdatedAt: m.symplicityUpdatedAt,
       symplicityUpdatedBy: m.symplicityUpdatedBy,
+      welcomeSocialInterest: m.welcomeSocialInterest,
+      companyChatInterest: m.companyChatInterest,
+      careerDiscoveryFairInterest: m.careerDiscoveryFairInterest,
     },
   }
 

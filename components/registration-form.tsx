@@ -33,7 +33,6 @@ import { decisionDeadlineFromRegistered } from "@/lib/f26Registration"
 import { calculateEstimatedPackageValue } from "@/lib/packagePricing"
 import { getCompanySlug } from "@/lib/companyNormalizer"
 import { ASSIGNMENT_OPTIONS } from "@/lib/types"
-
 const PACKAGE_TIERS: PackageTier[] = ["Basic", "Silver", "Gold", "Diamond", "Maroon"]
 const DURATIONS: FairDuration[] = ["One-Day", "Two-Day"]
 const DAYS_OPTIONS: { value: DaysAttending; label: string }[] = [
@@ -89,6 +88,9 @@ type FormData = {
   workAuthorization: string[]
   assignedTo: AssignedToCoordinator
   symplicityUpdated: boolean
+  welcomeSocialInterest: "Yes" | "No" | ""
+  companyChatInterest: "Yes" | "No" | ""
+  careerDiscoveryFairInterest: "Yes" | "No" | ""
 }
 
 function todayIso() {
@@ -113,6 +115,9 @@ const defaultForm: FormData = {
   workAuthorization: [],
   assignedTo: "Unassigned",
   symplicityUpdated: false,
+  welcomeSocialInterest: "",
+  companyChatInterest: "",
+  careerDiscoveryFairInterest: "",
 }
 
 function FormSection({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
@@ -176,7 +181,17 @@ export function RegistrationFormDialog({ onManualRegistration }: Props) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.organization.trim() || !form.packageTier || !form.duration || !form.primaryMajor) return
+    if (
+      !form.organization.trim() ||
+      !form.packageTier ||
+      !form.duration ||
+      !form.primaryMajor ||
+      !form.welcomeSocialInterest ||
+      !form.companyChatInterest ||
+      !form.careerDiscoveryFairInterest
+    ) {
+      return
+    }
     const id = getCompanySlug(form.organization.trim())
     const repN = Math.max(0, Math.floor(Number(form.representativeCount) || 0))
     const devN = form.poweredDevices.trim() ? Math.max(0, Number(form.poweredDevices)) : undefined
@@ -205,6 +220,9 @@ export function RegistrationFormDialog({ onManualRegistration }: Props) {
       symplicityUpdated: form.symplicityUpdated,
       bttStatus: "None",
       oneToTwoDayStatus: "None",
+      welcomeSocialInterest: form.welcomeSocialInterest,
+      companyChatInterest: form.companyChatInterest,
+      careerDiscoveryFairInterest: form.careerDiscoveryFairInterest,
     }
     onManualRegistration?.(entry)
     setSubmitted(true)
@@ -372,6 +390,56 @@ export function RegistrationFormDialog({ onManualRegistration }: Props) {
                     {estimate != null && (
                       <p className="mt-2 text-base font-bold text-foreground">Estimated total: ${estimate.toLocaleString()}</p>
                     )}
+                  </div>
+                </FormSection>
+
+                <FormSection icon={Briefcase} title="Event interest">
+                  <p className="text-xs text-muted-foreground -mt-2">
+                    Is the company interested in participating in these events?
+                  </p>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <FormField label="Welcome Social" required>
+                      <Select
+                        value={form.welcomeSocialInterest || undefined}
+                        onValueChange={(v) => set("welcomeSocialInterest", v as "Yes" | "No")}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Yes or No" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Yes">Yes</SelectItem>
+                          <SelectItem value="No">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormField>
+                    <FormField label="Company Chat" required>
+                      <Select
+                        value={form.companyChatInterest || undefined}
+                        onValueChange={(v) => set("companyChatInterest", v as "Yes" | "No")}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Yes or No" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Yes">Yes</SelectItem>
+                          <SelectItem value="No">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormField>
+                    <FormField label="Career Discovery Fair" required>
+                      <Select
+                        value={form.careerDiscoveryFairInterest || undefined}
+                        onValueChange={(v) => set("careerDiscoveryFairInterest", v as "Yes" | "No")}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Yes or No" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Yes">Yes</SelectItem>
+                          <SelectItem value="No">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormField>
                   </div>
                 </FormSection>
 

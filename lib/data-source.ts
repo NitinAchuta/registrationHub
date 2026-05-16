@@ -47,12 +47,19 @@ export function getRegistrationCompanies(
 }
 
 export function getCompaniesWithActiveRegistrationOverlay(): CompanyRecord[] {
-  return dataset.companies.map((company) => ({
-    ...company,
-    currentRegistration: company.currentRegistration ?? null,
-    registrationHistory: { ...company.registrationHistory },
-    sources: [...company.sources],
-  }))
+  return dataset.companies.map((company) => {
+    let currentRegistration = company.currentRegistration ?? null
+    // Generated JSON may still carry S26 as currentRegistration until regen; F26 is sheet-driven.
+    if (ACTIVE_FAIR.code === "F26" && currentRegistration?.semester !== "F26") {
+      currentRegistration = company.registrationHistory[ACTIVE_FAIR.code] ?? null
+    }
+    return {
+      ...company,
+      currentRegistration,
+      registrationHistory: { ...company.registrationHistory },
+      sources: [...company.sources],
+    }
+  })
 }
 
 /**

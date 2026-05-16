@@ -30,6 +30,13 @@ export function excelSerialToDate(serial: number): Date {
   return new Date(epochUtc + ms)
 }
 
+function dateToLocalIso(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
 export type PhoneNormalizeResult = {
   displayPhone: string
   digits: string
@@ -209,7 +216,7 @@ function cellStr(row: unknown[], i: number): string {
     if (i === 20 && v > 1000 && v < 100000) {
       try {
         const d = excelSerialToDate(v)
-        return d.toISOString().slice(0, 10)
+        return dateToLocalIso(d)
       } catch {
         return String(v)
       }
@@ -232,7 +239,7 @@ function parseDateRegisteredU(row: unknown[], warnings: string[]): { iso: string
         warnings.push("Registration date missing")
         return { iso: null, display: "Date registered missing" }
       }
-      return { iso: d.toISOString().slice(0, 10), display: d.toISOString().slice(0, 10) }
+      return { iso: dateToLocalIso(d), display: dateToLocalIso(d) }
     } catch {
       warnings.push("Registration date missing")
       return { iso: null, display: "Date registered missing" }
@@ -241,7 +248,7 @@ function parseDateRegisteredU(row: unknown[], warnings: string[]): { iso: string
   const s = String(v).trim()
   const parsed = Date.parse(s)
   if (!Number.isNaN(parsed)) {
-    return { iso: new Date(parsed).toISOString().slice(0, 10), display: s }
+    return { iso: dateToLocalIso(new Date(parsed)), display: s }
   }
   warnings.push("Registration date missing")
   return { iso: null, display: "Date registered missing" }

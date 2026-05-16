@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint .",
     "gen:data": "node scripts/generate-company-data.mjs",
-    "predev": "node scripts/generate-company-data.mjs"
+    "predev": "node scripts/generate-company-data.mjs",
+    "deploy": "npx --node-options=--use-system-ca vercel@latest",
+    "deploy:prod": "npx --node-options=--use-system-ca vercel@latest deploy --prod"
   },
   "engines": {
     "node": ">=20.9.0"
